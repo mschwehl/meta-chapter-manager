@@ -115,9 +115,23 @@ const MCM_I18N = {
     Object.entries(MCM_TRANSLATIONS.eventStatus).map(([key, label]) => ({ key, label }))
 };
 
+/**
+ * Role-level enum — single source of truth for both server and client.
+ *
+ *   ROLE_LEVEL.CHAPTER  Chapter-Admin: full access to all sparten in the chapter.
+ *   ROLE_LEVEL.SPARTE   Spartenadmin / Spartenleiter: scoped to own sparten.
+ *
+ * JWT shape: { chapterId: { level: ROLE_LEVEL.*, sparten: string[] } }
+ */
+const ROLE_LEVEL = Object.freeze({
+  CHAPTER: 'chapter',
+  SPARTE:  'sparte',
+});
+
 /* ── Export: Node.js oder Browser ──────────────────────────────── */
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = MCM_I18N;
+  module.exports = Object.assign(MCM_I18N, { ROLE_LEVEL });
 } else {
   window.MCM_I18N = MCM_I18N;
+  window.ROLE_LEVEL = ROLE_LEVEL;
 }

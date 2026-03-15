@@ -1,9 +1,18 @@
 const path = require('path');
 
+// Fail fast: JWT_SECRET must be set explicitly — no insecure default.
+if (!process.env.JWT_SECRET) {
+  process.stderr.write(JSON.stringify({
+    ts: new Date().toISOString(), level: 'FATAL', event: 'startup.config',
+    msg: 'JWT_SECRET environment variable is not set. Set a strong secret before starting.',
+  }) + '\n');
+  process.exit(1);
+}
+
 // All configurable via environment variables
 const config = {
   port: parseInt(process.env.PORT || '3000', 10),
-  jwtSecret: process.env.JWT_SECRET || 'mcm-secret-key-change-in-prod',
+  jwtSecret: process.env.JWT_SECRET,
 
   // Git database repo – can be file:// or https:// URL, or a local path
   // Examples:
@@ -34,6 +43,12 @@ const config = {
 
   // If https git URL: skip SSL verification (self-signed certs)
   gitSslVerify: process.env.GIT_SSL_VERIFY !== 'false',
+
+  // Allowed CORS origin for the API.
+  // '': same-origin only (recommended for self-hosted / OpenShift behind a single route)
+  // '*': wildcard – allow any origin (use for local dev / testing ONLY)
+  // 'https://app.example.com': single trusted origin
+  corsOrigin: process.env.CORS_ORIGIN || '',
 };
 
 module.exports = config;

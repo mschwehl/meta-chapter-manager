@@ -97,14 +97,13 @@ const UserSettings = {
           <span v-if="isOrgaAdmin" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-700">🏛 Organisations-Admin</span>
           <span v-if="isZeitstelle" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">⏱ Zeitstelle</span>
           <template v-for="(role, cid) in (user.roles || {})" :key="cid">
-            <span v-if="role === 'chapteradmin'" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">🏢 Chapter-Admin · {{ i18n.chapter(cid) }}</span>
-            <template v-else-if="role?.sparten">
-              <span v-for="sp in role.sparten" :key="sp" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">🏓 Spartenadmin · {{ i18n.sparte(sp) }} ({{ i18n.chapter(cid) }})</span>
-            </template>
+            <span v-if="role.level === ROLE_LEVEL.CHAPTER" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">🏢 Chapter-Admin · {{ i18n.chapter(cid) }}</span>
+            <span v-for="sp in (role.sparten || [])" :key="cid + '|' + sp"
+              :class="role.level === ROLE_LEVEL.CHAPTER ? 'bg-teal-100 text-teal-700' : 'bg-blue-100 text-blue-700'"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold">
+              🏓 {{ role.level === ROLE_LEVEL.CHAPTER ? 'Spartenleiter' : 'Spartenadmin' }} · {{ i18n.sparte(sp) }} ({{ i18n.chapter(cid) }})</span>
           </template>
-          <span v-for="sl in (user.spartenleiter || [])" :key="sl.chapterId + '|' + sl.sparteId"
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-teal-100 text-teal-700">🏓 Spartenleiter · {{ i18n.sparte(sl.sparteId) }} ({{ i18n.chapter(sl.chapterId) }})</span>
-          <span v-if="!isOrgaAdmin && !isZeitstelle && !Object.keys(user.roles || {}).length && !(user.spartenleiter || []).length"
+          <span v-if="!isOrgaAdmin && !isZeitstelle && !Object.keys(user.roles || {}).length"
             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">👤 Mitglied</span>
         </div>
       </div>

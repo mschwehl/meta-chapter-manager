@@ -49,7 +49,7 @@ const ChapterManager = {
   methods: {
     // ── Role helpers ──
     canEditChapterStructure(cid) { return this.canManageChapterMembers(cid); },
-    canManageChapterMembers(cid) { return (this.user.roles || {})[cid] === 'chapteradmin'; },
+    canManageChapterMembers(cid) { return (this.user.roles || {})[cid]?.level === ROLE_LEVEL.CHAPTER; },
 
     // ── Name loading ──
     async loadNamesForList(kuerzels) {

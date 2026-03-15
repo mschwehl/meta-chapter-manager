@@ -323,7 +323,7 @@ const app = createApp({
     const isZeitstelle = computed(() => !!user.value.zeitstelle);
     const isSuperadminAnywhere = computed(() => {
       if (isOrgaAdmin.value) return true;
-      return Object.values(user.value.roles || {}).some(r => r === 'chapteradmin');
+      return Object.values(user.value.roles || {}).some(r => r.level === ROLE_LEVEL.CHAPTER);
     });
     const hasAnyChapterRole = computed(() => Object.keys(user.value.roles || {}).length > 0);
 
@@ -490,15 +490,14 @@ const app = createApp({
       if (isZeitstelle.value)
         opts.push({ type: 'zeitstelle', label: 'Zeitstelle', detail: null, icon: '⏱', desc: 'Freigabelisten und Dokumente verwalten', color: 'amber' });
       for (const [cid, role] of Object.entries(roles)) {
-        if (role === 'chapteradmin')
+        if (role.level === ROLE_LEVEL.CHAPTER) {
           opts.push({ type: 'chapteradmin', chapterId: cid, label: 'Chapter-Admin', detail: i18n.chapter(cid), icon: '🏢', desc: 'Mitglieder verwalten, Eintritt und Austritt erfassen', color: 'purple' });
-        else if (role?.role === 'spartenadmin' && role?.sparten?.length)
-          for (const sp of role.sparten)
+          for (const sp of (role.sparten || []))
+            opts.push({ type: 'spartenadmin', chapterId: cid, sparteId: sp, label: 'Zeitkorrektur prüfen', detail: `${i18n.sparte(sp)} · ${i18n.chapter(cid)}`, icon: '⏱', desc: 'Freigabeliste erstellen und Zeitkorrektur einreichen', color: 'teal' });
+        } else if (role.level === ROLE_LEVEL.SPARTE) {
+          for (const sp of (role.sparten || []))
             opts.push({ type: 'spartenadmin', chapterId: cid, sparteId: sp, label: 'Spartenadmin', detail: `${i18n.sparte(sp)} · ${i18n.chapter(cid)}`, icon: '🏓', desc: 'Veranstaltungen prüfen und einreichen', color: 'blue' });
-      }
-      for (const sl of (user.value.spartenleiter || [])) {
-        if (!opts.some(o => o.type === 'spartenadmin' && o.chapterId === sl.chapterId && o.sparteId === sl.sparteId))
-          opts.push({ type: 'spartenadmin', chapterId: sl.chapterId, sparteId: sl.sparteId, role: 'Spartenleitung', label: 'Zeitkorrektur prüfen', detail: `${i18n.sparte(sl.sparteId)} · ${i18n.chapter(sl.chapterId)}`, icon: '⏱', desc: 'Freigabeliste erstellen und Zeitkorrektur einreichen', color: 'teal' });
+        }
       }
       if (opts.length === 0)
         opts.push({ type: 'member', label: 'Mitglied', detail: null, icon: '👤', desc: 'Konto und Einstellungen verwalten', color: 'gray' });

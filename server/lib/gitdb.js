@@ -2,9 +2,21 @@ const fs = require('fs').promises;
 const path = require('path');
 const simpleGit = require('simple-git');
 const config = require('../config');
+const logger = require('./logger');
 
 let DB_PATH = config.dataDir;
 let _isDemoMode = false;
+
+// Short-lived in-memory cache for credentials.json (used at login / password change).
+let _credCache = null;
+let _credCacheTs = 0;
+const CRED_CACHE_TTL = 10_000; // 10 seconds
+
+// In-memory revocation table: kuerzel → timestamp (ms).
+// JWTs issued before this timestamp are rejected by authMiddleware.
+// Intentionally NOT persisted to git – keeps the data repo clean.
+// After a server restart old tokens remain valid until they expire naturally (8 h).
+const _revokedAt = new Map();
 
 function isDemoMode() { return _isDemoMode; }
 
@@ -72,7 +84,7 @@ async function initDatabase() {
           JSON.stringify({ admin: { hash: adminHash, mustChange: false } }, null, 2));
         await git.add('.');
         await git.commit('Demo: Initial database structure');
-        console.log('  ⚠️  DEMO-MODUS – Anmeldung: admin / admin');
+        logger.warn('startup.demo', { msg: 'DEMO-MODUS aktiv – Anmeldung: admin / admin' });
       }
     } else {
       await ensureGitIdentity(git);
@@ -83,7 +95,7 @@ async function initDatabase() {
         if (!config.gitDbUrl && orgData.name === 'Demo-Organisation') _isDemoMode = true;
       } catch { /* ignore */ }
     }
-    console.log(`  Database: lokales Verzeichnis ${dir}`);
+    logger.info('startup.db', { mode: 'local', dir });
     return;
   }
 
@@ -101,7 +113,7 @@ async function initDatabase() {
     await ensureGitIdentity(git);
     await git.env(gitEnv).remote(['set-url', 'origin', authUrl]);
     await git.env(gitEnv).pull('origin', branch);
-    console.log(`  Database: pull von ${url} (${branch})`);
+    logger.info('startup.db', { mode: 'pull', url: url.replace(/:[^@]*@/, ':***@'), branch });
   } catch {
     // Not yet cloned – clone
     const git = simpleGit({ config: !config.gitSslVerify ? ['http.sslVerify=false'] : [] });
@@ -110,7 +122,7 @@ async function initDatabase() {
     await ensureGitIdentity(clonedGit);
     // Keep credentials in remote URL for future pushes
     await clonedGit.env(gitEnv).remote(['set-url', 'origin', authUrl]);
-    console.log(`  Database: geklont von ${url} (${branch})`);
+    logger.info('startup.db', { mode: 'clone', url: url.replace(/:[^@]*@/, ':***@'), branch });
   }
 }
 
@@ -153,13 +165,13 @@ async function gitSave(commitMessage, authorKuerzel) {
       if (!config.gitSslVerify) gitEnv.GIT_SSL_NO_VERIFY = '1';
       await git.env(gitEnv).remote(['set-url', 'origin', buildAuthUrl(config.gitDbUrl)]);
       await git.env(gitEnv).push(['-u', 'origin', config.gitDbBranch]);
-      console.log(`[git] push: ${commitMessage}`);
+      logger.info('git.push', { msg: commitMessage });
     } else {
-      console.log(`[git] commit: ${commitMessage}`);
+      logger.debug('git.commit', { msg: commitMessage });
     }
   } catch (e) {
     // File is already saved – don't let git errors break the API
-    console.error(`[git] save error: ${e.message}`);
+    logger.error('git.save', { err: e.message });
   }
 }
 
@@ -200,10 +212,10 @@ function startAutoSync(intervalMs = 5 * 60 * 1000) {
   _syncInterval = setInterval(async () => {
     const result = await gitCommitAndPush();
     if (result.committed) {
-      console.log(`  [Auto-Sync] ${result.message}${result.pushed ? ' + push' : ''}`);
+      logger.info('git.autosync', { pushed: result.pushed });
     }
   }, intervalMs);
-  console.log(`  Auto-Sync: alle ${intervalMs / 1000}s`);
+  logger.info('startup.autosync', { intervalSec: intervalMs / 1000 });
 }
 
 function stopAutoSync() {
@@ -216,6 +228,16 @@ async function readCredentials() {
   } catch {
     return {};
   }
+}
+
+function invalidateCredentialsCache() { _credCache = null; }
+
+async function readCredentialsCached() {
+  const now = Date.now();
+  if (_credCache && now - _credCacheTs < CRED_CACHE_TTL) return _credCache;
+  _credCache = await readCredentials();
+  _credCacheTs = now;
+  return _credCache;
 }
 
 /**
@@ -236,6 +258,7 @@ async function writeCredential(kuerzel, hash, mustChange, authorKuerzel) {
   const credPath = path.join(DB_PATH, 'credentials.json');
   const creds = await readCredentials();
   creds[kuerzel] = { hash, mustChange: mustChange === true };
+  invalidateCredentialsCache();
   await writeJson(credPath, creds, `Passwort geändert: ${kuerzel}`, authorKuerzel || 'system');
 }
 
@@ -243,7 +266,23 @@ async function deleteCredential(kuerzel, authorKuerzel) {
   const credPath = path.join(DB_PATH, 'credentials.json');
   const creds = await readCredentials();
   delete creds[kuerzel];
+  invalidateCredentialsCache();
   await writeJson(credPath, creds, `Credential gelöscht: ${kuerzel}`, authorKuerzel || 'system');
+}
+
+/**
+ * Forces all active JWT sessions for a user to fail on the next API request.
+ * Stored only in process memory – no file write, no git commit.
+ * After a server restart existing tokens remain valid until their 8 h expiry.
+ */
+function invalidateUserToken(kuerzel) {
+  _revokedAt.set(kuerzel, Date.now());
+  logger.info('auth.token_revoked', { user: kuerzel });
+}
+
+/** Returns the revocation timestamp (ms) for a user, or 0 if not revoked. */
+function getRevokedAt(kuerzel) {
+  return _revokedAt.get(kuerzel) || 0;
 }
 
 async function readOrganisation() {
@@ -426,6 +465,8 @@ module.exports = {
   getCredential,
   writeCredential,
   deleteCredential,
+  invalidateUserToken,
+  getRevokedAt,
   readOrganisation,
   readChapters,
   readChapter,

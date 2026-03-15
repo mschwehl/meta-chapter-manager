@@ -24,7 +24,7 @@ const MemberManager = {
   computed: {
     accessibleChapters() {
       if (this.isOrgaAdmin) return this.prChapters;
-      return this.prChapters.filter(c => { const r = (this.user.roles||{})[c.id]; return r === 'chapteradmin' || r?.role === 'spartenadmin'; });
+      return this.prChapters.filter(c => { const r = (this.user.roles||{})[c.id]; return r?.level === ROLE_LEVEL.CHAPTER || r?.level === ROLE_LEVEL.SPARTE; });
     },
     // Sparten available for filter: only when a chapter is selected
     spartenInChapter() {
@@ -60,12 +60,12 @@ const MemberManager = {
     },
     accessibleSparten(chapterId) {
       const all = this.prChapters.find(c => c.id === chapterId)?.sparten || [];
-      if (this.isOrgaAdmin || (this.user.roles||{})[chapterId] === 'chapteradmin') return all;
+      if (this.isOrgaAdmin || (this.user.roles||{})[chapterId]?.level === ROLE_LEVEL.CHAPTER) return all;
       const r = (this.user.roles||{})[chapterId];
-      if (r?.role === 'spartenadmin') return all.filter(s => (r.sparten||[]).includes(s.id));
+      if (r?.level === ROLE_LEVEL.SPARTE) return all.filter(s => (r.sparten||[]).includes(s.id));
       return [];
     },
-    canEditChapter(cid) { return this.isOrgaAdmin || (this.user.roles || {})[cid] === 'chapteradmin'; },
+    canEditChapter(cid) { return this.isOrgaAdmin || (this.user.roles || {})[cid]?.level === ROLE_LEVEL.CHAPTER; },
     select(u) { this.selected = u; this.edit = null; this.creating = null; this.error = ''; this.chapterError = ''; },
     newMember() { this.selected = null; this.edit = null; this.creating = { kuerzel: '', name: '', vorname: '' }; this.error = ''; },
     startEdit(u) { this.edit = { name: u.name, vorname: u.vorname }; this.error = ''; },

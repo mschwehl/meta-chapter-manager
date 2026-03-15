@@ -23,8 +23,7 @@ const EventsList = {
   methods: {
     canApprove(ev) {
       return this.isOrgaAdmin || this.isZeitstelle ||
-        (this.user.roles || {})[ev.chapterId] === 'chapteradmin' ||
-        (this.user.roles || {})[ev.chapterId]?.role === 'spartenadmin';
+        !!(this.user.roles || {})[ev.chapterId]?.level;
     },
     onChapterChange() {
       this.evNew.sparte = '';

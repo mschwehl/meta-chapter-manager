@@ -15,11 +15,13 @@ const docsRoutes = require('./routes/docs');
 const requestsRoutes = require('./routes/requests');
 const { authMiddleware } = require('./middleware/auth');
 const { initDatabase, startAutoSync, gitCommitAndPush, readUser, isDemoMode } = require('./lib/gitdb');
+const logger = require('./lib/logger');
 
 const app = express();
 
-app.use(cors());
+app.use(cors({ origin: config.corsOrigin || false }));
 app.use(express.json());
+app.use(logger.requestMiddleware());
 app.use(express.static(path.join(__dirname, '../client')));
 
 // Public routes
@@ -75,7 +77,7 @@ app.get('/app/*', (req, res) => {
 async function start() {
   // Ensure docs directory exists (local, not in git)
   await fs.mkdir(config.docsDir, { recursive: true });
-  console.log(`  Dokumente: ${config.docsDir}`);
+  logger.info('startup.docs', { dir: config.docsDir });
 
   // Initialize database (clone/pull or init local)
   await initDatabase();
@@ -84,24 +86,23 @@ async function start() {
   startAutoSync();
 
   app.listen(config.port, () => {
-    console.log(`\n  MCM Server läuft auf http://localhost:${config.port}\n`);
+    logger.info('startup.listen', { port: config.port, demoMode: isDemoMode() });
   });
 }
 
 start().catch(err => {
-  console.error('Startup-Fehler:', err);
+  logger.error('startup.error', { err: err.message });
   process.exit(1);
 });
 
 // Graceful shutdown on SIGTERM (pod eviction, docker stop, k8s rolling update)
 async function shutdown(signal) {
-  console.log(`\n  [${signal}] Graceful shutdown – finaler git commit+push …`);
+  logger.info('shutdown', { signal });
   try {
     const result = await gitCommitAndPush();
-    if (result.committed) console.log(`  [shutdown] ${result.message}${result.pushed ? ' + push' : ''}`);
-    else console.log('  [shutdown] Keine offenen Änderungen.');
+    logger.info('shutdown.git', { committed: result.committed, pushed: result.pushed });
   } catch (e) {
-    console.error('  [shutdown] git flush error:', e.message);
+    logger.error('shutdown.git', { err: e.message });
   }
   process.exit(0);
 }

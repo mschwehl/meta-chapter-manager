@@ -1,11 +1,22 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const { JWT_SECRET } = require('../middleware/auth');
 const { authMiddleware } = require('../middleware/auth');
 const { getCredential, writeCredential, readUser, readChapters, readOrganisation } = require('../lib/gitdb');
+const logger = require('../lib/logger');
+const { ROLE_LEVEL } = require('../../client/i18n.js');
 
 const router = express.Router();
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Zu viele Anmeldeversuche. Bitte in 15 Minuten erneut versuchen.' },
+});
 
 const PASSWORD_MIN_LENGTH = 8;
 
@@ -16,7 +27,7 @@ function validatePasswordStrength(pw) {
   return null;
 }
 
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   const { kuerzel, password } = req.body;
   if (!kuerzel || !password) {
     return res.status(400).json({ error: 'Kürzel und Passwort erforderlich' });
@@ -27,42 +38,39 @@ router.post('/login', async (req, res) => {
   // No credential entry = kuerzel is the initial password (set on account creation / after reset)
   if (!credential) {
     if (password !== kuerzel) {
-      console.log(`[auth] LOGIN FAILED (initial) – ${kuerzel}`);
+      logger.warn('auth.login.fail', { user: kuerzel, ip: req.ip, reason: 'bad_initial_pw' });
       return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
     }
-    console.log(`[auth] LOGIN OK (initial pw) – ${kuerzel}`);
+    logger.info('auth.login.ok', { user: kuerzel, ip: req.ip, initial: true });
     // Fall through with mustChange flag so the client forces password change
   } else {
     const valid = await bcrypt.compare(password, credential.hash);
     if (!valid) {
-      console.log(`[auth] LOGIN FAILED – ${kuerzel}`);
+      logger.warn('auth.login.fail', { user: kuerzel, ip: req.ip, reason: 'bad_password' });
       return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
     }
-    console.log(`[auth] LOGIN OK – ${kuerzel}`);
+    logger.info('auth.login.ok', { user: kuerzel, ip: req.ip });
   }
 
   const user = await readUser(kuerzel).catch(() => ({ kuerzel, name: '', vorname: '' }));
   const chapters = await readChapters();
   const org = await readOrganisation().catch(() => ({ orgAdmins: [] }));
 
-  // Rollen aus chapter-JSON ableiten
+  // Rollen aus chapter-JSON ableiten.
+  // Einheitliche Form: { chapterId: { level: 'chapter'|'sparte', sparten: string[] } }
+  //   level 'chapter'  = Chapter-Admin (Superadmin) – Vollzugriff auf alle Sparten
+  //   level 'sparte'   = Spartenadmin / Spartenleiter – nur eigene Sparten
+  //   sparten[]        = Sparten, in denen der User explizit als Admin/Leiter eingetragen ist
   const roles = {};
-  const spartenleiter = [];
   for (const chapter of chapters) {
-    if ((chapter.admins || []).includes(kuerzel)) {
-      roles[chapter.id] = 'chapteradmin';
-    }
-    for (const sparte of (chapter.sparten || [])) {
-      if ((sparte.admins || []).includes(kuerzel)) {
-        // Spartenleiter-Einträge (unabhängig von chapteradmin)
-        spartenleiter.push({ chapterId: chapter.id, sparteId: sparte.id });
-        // Spartenadmin-Rolle nur wenn nicht bereits chapteradmin
-        if (roles[chapter.id] !== 'chapteradmin') {
-          if (!roles[chapter.id]) roles[chapter.id] = { role: 'spartenadmin', sparten: [] };
-          roles[chapter.id].sparten = roles[chapter.id].sparten || [];
-          roles[chapter.id].sparten.push(sparte.id);
-        }
-      }
+    const isChapterAdmin = (chapter.admins || []).includes(kuerzel);
+    const adminSparten = (chapter.sparten || [])
+      .filter(sp => (sp.admins || []).includes(kuerzel))
+      .map(sp => sp.id);
+    if (isChapterAdmin) {
+      roles[chapter.id] = { level: ROLE_LEVEL.CHAPTER, sparten: adminSparten };
+    } else if (adminSparten.length > 0) {
+      roles[chapter.id] = { level: ROLE_LEVEL.SPARTE, sparten: adminSparten };
     }
   }
 
@@ -76,7 +84,7 @@ router.post('/login', async (req, res) => {
   const displayVorname = user.vorname || '';
 
   const token = jwt.sign(
-    { kuerzel, name: displayName, vorname: displayVorname, roles, spartenleiter, orgaAdmin: isOrgaAdmin, zeitstelle: isZeitstelle },
+    { kuerzel, name: displayName, vorname: displayVorname, roles, orgaAdmin: isOrgaAdmin, zeitstelle: isZeitstelle },
     JWT_SECRET,
     { expiresIn: '8h' }
   );
@@ -87,7 +95,6 @@ router.post('/login', async (req, res) => {
     name: displayName,
     vorname: displayVorname,
     roles,
-    spartenleiter,
     orgaAdmin: isOrgaAdmin,
     zeitstelle: isZeitstelle,
     mustChangePassword: credential ? credential.mustChange : true
@@ -121,7 +128,7 @@ router.post('/change-password', authMiddleware, async (req, res) => {
 
   const newHash = await bcrypt.hash(newPassword, 12);
   await writeCredential(kuerzel, newHash, false, kuerzel);
-  console.log(`[auth] PASSWORD CHANGED – ${kuerzel}`);
+  logger.info('auth.password_changed', { user: kuerzel, ip: req.ip });
 
   res.json({ message: 'Passwort erfolgreich geändert' });
 });

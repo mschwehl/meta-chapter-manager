@@ -3,9 +3,11 @@ const os = require('os');
 const {
   readAllUsers, readUser, writeJson, deleteJson, readCredentials, writeCredential, deleteCredential, DB_PATH, readOrganisation, readChapters, gitLog
 } = require('../lib/gitdb');
-const { requireChapterAdmin, requireOrgaAdmin } = require('../middleware/roles');
+const { requireChapterAdmin, requireOrgaAdmin, canManageChapterSparte } = require('../middleware/roles');
 const config = require('../config');
 const path = require('path');
+const logger = require('../lib/logger');
+const { ROLE_LEVEL } = require('../../client/i18n.js');
 
 const router = express.Router();
 
@@ -20,7 +22,7 @@ router.get('/users', async (req, res) => {
   const allowedChapters = (orgaAdmin || zeitstelle)
     ? null  // null = all
     : Object.entries(roles || {})
-        .filter(([, r]) => r === 'chapteradmin' || r?.role === 'spartenadmin')
+        .filter(([, r]) => r?.level === ROLE_LEVEL.CHAPTER || r?.level === ROLE_LEVEL.SPARTE)
         .map(([id]) => id);
 
   let users = await readAllUsers();
@@ -79,7 +81,7 @@ router.put('/users/:kuerzel', async (req, res) => {
 
   if (!orgaAdmin) {
     const userChapters = (existing.chapters || []).map(c => c.chapterId);
-    const hasAccess = userChapters.some(cid => roles?.[cid] === 'chapteradmin');
+    const hasAccess = userChapters.some(cid => roles?.[cid]?.level === ROLE_LEVEL.CHAPTER);
     if (!hasAccess) return res.status(403).json({ error: 'Zugriff verweigert' });
   }
 
@@ -105,9 +107,7 @@ router.post('/users/:kuerzel/chapter', async (req, res) => {
   }
 
   if (!orgaAdmin) {
-    const r = roles?.[chapterId];
-    const ok = r === 'chapteradmin' || (r?.role === 'spartenadmin' && (r.sparten||[]).includes(sparte));
-    if (!ok) return res.status(403).json({ error: 'Zugriff verweigert' });
+    if (!canManageChapterSparte(req.user, chapterId, sparte)) return res.status(403).json({ error: 'Zugriff verweigert' });
   }
 
   if (existing.chapters?.some(c => c.chapterId === chapterId && c.sparte === sparte)) {
@@ -141,9 +141,7 @@ router.patch('/users/:kuerzel/chapter', async (req, res) => {
   }
 
   if (!orgaAdmin) {
-    const r = roles?.[chapterId];
-    const ok = r === 'chapteradmin' || (r?.role === 'spartenadmin' && (r.sparten||[]).includes(sparte));
-    if (!ok) return res.status(403).json({ error: 'Zugriff verweigert' });
+    if (!canManageChapterSparte(req.user, chapterId, sparte)) return res.status(403).json({ error: 'Zugriff verweigert' });
   }
 
   const membership = (existing.chapters || []).find(c => c.chapterId === chapterId && c.sparte === sparte);
@@ -168,9 +166,7 @@ router.delete('/users/:kuerzel/chapter', async (req, res) => {
   }
 
   if (!orgaAdmin) {
-    const r = roles?.[chapterId];
-    const ok = r === 'chapteradmin' || (r?.role === 'spartenadmin' && (r.sparten||[]).includes(sparte));
-    if (!ok) return res.status(403).json({ error: 'Zugriff verweigert' });
+    if (!canManageChapterSparte(req.user, chapterId, sparte)) return res.status(403).json({ error: 'Zugriff verweigert' });
   }
 
   existing.chapters = (existing.chapters || []).filter(c => !(c.chapterId === chapterId && c.sparte === sparte));
@@ -214,12 +210,12 @@ router.post('/users/:kuerzel/reset-password', async (req, res) => {
 
   if (!orgaAdmin) {
     const userChapters = (existing.chapters || []).map(c => c.chapterId);
-    const hasAccess = userChapters.some(cid => roles?.[cid] === 'chapteradmin');
+    const hasAccess = userChapters.some(cid => roles?.[cid]?.level === ROLE_LEVEL.CHAPTER);
     if (!hasAccess) return res.status(403).json({ error: 'Zugriff verweigert' });
   }
 
   await deleteCredential(kuerzel, req.user.kuerzel);
-  console.log(`[admin] RESET PASSWORD â€“ ${kuerzel} (by ${req.user.kuerzel})`);
+  logger.info('admin.password_reset', { target: kuerzel, by: req.user.kuerzel });
   res.json({ message: `Passwort fÃ¼r ${kuerzel} zurÃ¼ckgesetzt (Initial: KÃ¼rzel)` });
 });
 

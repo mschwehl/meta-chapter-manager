@@ -7,16 +7,13 @@ const router = express.Router();
 async function getAccessibleChapters(user) {
   const chapters = await readChapters();
   if (user.orgaAdmin || user.zeitstelle) return chapters;
-  return chapters.filter(c =>
-    user.roles?.[c.id] === 'chapteradmin' || user.roles?.[c.id]?.role === 'spartenadmin'
-  );
+  return chapters.filter(c => user.roles?.[c.id]?.level);
 }
 
 // Helper: check if user can access a specific chapter
 function canAccessChapter(user, chapterId) {
   if (user.orgaAdmin || user.zeitstelle) return true;
-  const r = user.roles?.[chapterId];
-  return r === 'chapteradmin' || r?.role === 'spartenadmin';
+  return !!user.roles?.[chapterId]?.level;
 }
 
 // GET /api/events?chapterId=nsk&sparte=tischtennis&status=offen
