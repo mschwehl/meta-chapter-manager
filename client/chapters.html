@@ -1,0 +1,247 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCM â€“ Chapter Verwaltung</title>
+  <script src="/vendor/tailwindcss-browser.js"></script>
+  <script src="/i18n.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+<div id="app">
+
+  <nav class="bg-blue-700 text-white shadow-lg">
+    <div class="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <a href="/dashboard.html" class="text-blue-200 hover:text-white text-sm">â† Dashboard</a>
+        <span class="text-blue-400">/</span>
+        <span class="font-semibold">Chapter-Verwaltung</span>
+      </div>
+      <span class="text-blue-200 text-sm">{{ user.vorname }} {{ user.name }}</span>
+    </div>
+  </nav>
+
+  <main class="max-w-5xl mx-auto px-6 py-8">
+
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-2xl font-bold text-gray-800">Chapters</h1>
+      <button v-if="user.orgaAdmin" @click="openNew" class="btn-primary">ï¼‹ Neues Chapter</button>
+    </div>
+
+    <div v-if="loading" class="text-center text-gray-400 py-16">Laden â€¦</div>
+
+    <div v-else class="space-y-6">
+      <div v-for="chapter in chapters" :key="chapter.id"
+        class="bg-white rounded-2xl shadow p-6">
+
+        <!-- Header -->
+        <div class="flex items-start justify-between mb-4">
+          <div>
+            <h2 class="text-lg font-bold text-gray-800">{{ chapter.name }}</h2>
+            <span class="text-gray-400 text-sm font-mono">{{ chapter.id }}</span>
+          </div>
+          <button @click="openEdit(chapter)" class="btn-secondary text-xs">Bearbeiten</button>
+        </div>
+
+        <!-- Sparten -->
+        <div class="mb-4">
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Sparten</div>
+          <div class="flex flex-wrap gap-2">
+            <span v-for="s in (chapter.sparten||[])" :key="s"
+              class="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">
+              {{ i18n.sparte(s) }}
+            </span>
+            <span v-if="!chapter.sparten||!chapter.sparten.length" class="text-gray-400 text-sm">â€“</span>
+          </div>
+        </div>
+
+        <!-- Superadmins -->
+        <div class="mb-4">
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Superadmins</div>
+          <div class="flex flex-wrap gap-2">
+            <span v-for="k in (chapter.superadmins||[])" :key="k"
+              class="px-3 py-1 bg-purple-50 text-purple-700 rounded-full text-xs font-mono">{{ k }}</span>
+            <span v-if="!chapter.superadmins||!chapter.superadmins.length" class="text-gray-400 text-sm">â€“</span>
+          </div>
+        </div>
+
+        <!-- Spartenadmins -->
+        <div>
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Spartenadmins</div>
+          <div class="space-y-1">
+            <div v-for="(admins, sparte) in (chapter.spartenadmins||{})" :key="sparte"
+              class="flex items-center gap-3 text-sm">
+              <span class="text-gray-600 w-32 shrink-0">{{ i18n.sparte(sparte) }}:</span>
+              <div class="flex flex-wrap gap-1">
+                <span v-for="k in admins" :key="k"
+                  class="px-2 py-0.5 bg-orange-50 text-orange-700 rounded-full text-xs font-mono">{{ k }}</span>
+              </div>
+            </div>
+            <div v-if="!chapter.spartenadmins||!Object.keys(chapter.spartenadmins).length" class="text-gray-400 text-sm">â€“</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Edit Modal -->
+  <div v-if="modal.open" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-xl my-4">
+      <div class="px-6 pt-6 pb-4 border-b flex items-center justify-between">
+        <h2 class="font-semibold text-gray-800 text-lg">{{ modal.isNew ? 'Neues Chapter' : modal.form.name }}</h2>
+        <button @click="modal.open = false" class="text-gray-400 hover:text-gray-600 text-xl">âœ•</button>
+      </div>
+      <form @submit.prevent="save" class="px-6 py-5 space-y-5">
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="label">ID *</label>
+            <input v-model="modal.form.id" :disabled="!modal.isNew" type="text" class="input" placeholder="nsk" required />
+          </div>
+          <div>
+            <label class="label">Name *</label>
+            <input v-model="modal.form.name" type="text" class="input" placeholder="NSK Nordstadt" required />
+          </div>
+        </div>
+
+        <!-- Sparten -->
+        <div>
+          <label class="label">Sparten (Komma-getrennt)</label>
+          <input v-model="modal.spartStr" type="text" class="input" placeholder="tischtennis,fussball,volleyball" />
+          <p class="text-xs text-gray-400 mt-1">SchlÃ¼ssel laut Datenmodell, z.B. tischtennis</p>
+        </div>
+
+        <!-- Superadmins -->
+        <div>
+          <label class="label">Superadmins (Komma-getrennt)</label>
+          <input v-model="modal.superStr" type="text" class="input" placeholder="s888,s96" />
+        </div>
+
+        <!-- Spartenadmins -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <label class="label mb-0">Spartenadmins</label>
+            <button type="button" @click="addSpartenAdminRow" class="text-xs text-blue-600 hover:text-blue-800">ï¼‹ Zeile</button>
+          </div>
+          <div v-for="(row, i) in modal.spartenadminRows" :key="i" class="flex gap-2 mb-2">
+            <input v-model="row.sparte" type="text" class="input flex-1" placeholder="tischtennis" />
+            <input v-model="row.admins" type="text" class="input flex-2" placeholder="s888,b333" />
+            <button type="button" @click="modal.spartenadminRows.splice(i,1)" class="text-red-400 hover:text-red-600">âœ•</button>
+          </div>
+        </div>
+
+        <div v-if="modal.error" class="px-4 py-2 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{{ modal.error }}</div>
+
+        <div class="flex justify-end gap-3 pt-2">
+          <button type="button" @click="modal.open = false" class="btn-secondary">Abbrechen</button>
+          <button type="submit" :disabled="modal.saving" class="btn-primary">{{ modal.saving ? 'Speichern â€¦' : 'Speichern' }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div v-if="toast.show" class="fixed bottom-6 right-6 px-5 py-3 rounded-xl shadow-lg text-white text-sm font-medium"
+    :class="toast.type === 'error' ? 'bg-red-600' : 'bg-green-600'">
+    {{ toast.msg }}
+  </div>
+
+</div>
+
+<style>
+  .label { @apply block text-sm font-medium text-gray-600 mb-1; }
+  .input { @apply w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500; }
+  .btn-primary { @apply bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg hover:bg-blue-800 disabled:opacity-50 transition-colors text-sm; }
+  .btn-secondary { @apply bg-gray-100 text-gray-700 font-medium px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors text-sm; }
+</style>
+
+<script src="/vendor/vue.global.prod.js"></script>
+<script>
+const { createApp, ref, reactive, onMounted } = Vue;
+createApp({
+  setup() {
+    const token = localStorage.getItem('token');
+    const user = ref(JSON.parse(localStorage.getItem('user') || '{}'));
+    if (!token) window.location.href = '/login.html';
+    const i18n = MCM_I18N;
+
+    const chapters = ref([]);
+    const loading = ref(true);
+    const modal = reactive({ open: false, isNew: false, saving: false, error: '', form: {}, spartStr: '', superStr: '', spartenadminRows: [] });
+    const toast = reactive({ show: false, msg: '', type: 'success' });
+
+    function showToast(msg, type = 'success') {
+      toast.msg = msg; toast.type = type; toast.show = true;
+      setTimeout(() => toast.show = false, 3000);
+    }
+
+    async function apiFetch(url, opts = {}) {
+      const res = await fetch(url, {
+        ...opts,
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(opts.headers||{}) }
+      });
+      if (res.status === 401) { window.location.href = '/login.html'; }
+      return res;
+    }
+
+    async function load() {
+      loading.value = true;
+      const res = await apiFetch('/api/chapters');
+      chapters.value = await res.json();
+      loading.value = false;
+    }
+
+    function openNew() {
+      modal.isNew = true; modal.error = '';
+      modal.form = { id: '', name: '', sparten: [], superadmins: [], spartenadmins: {} };
+      modal.spartStr = ''; modal.superStr = ''; modal.spartenadminRows = [];
+      modal.open = true;
+    }
+
+    function openEdit(ch) {
+      modal.isNew = false; modal.error = '';
+      modal.form = JSON.parse(JSON.stringify(ch));
+      modal.spartStr = (ch.sparten||[]).join(',');
+      modal.superStr = (ch.superadmins||[]).join(',');
+      modal.spartenadminRows = Object.entries(ch.spartenadmins||{}).map(([sparte, admins]) => ({ sparte, admins: admins.join(',') }));
+      modal.open = true;
+    }
+
+    function addSpartenAdminRow() {
+      modal.spartenadminRows.push({ sparte: '', admins: '' });
+    }
+
+    async function save() {
+      modal.saving = true; modal.error = '';
+      try {
+        const spartenadmins = {};
+        for (const row of modal.spartenadminRows) {
+          if (row.sparte) spartenadmins[row.sparte.trim()] = row.admins.split(',').map(s=>s.trim()).filter(Boolean);
+        }
+        const payload = {
+          ...modal.form,
+          sparten: modal.spartStr.split(',').map(s=>s.trim()).filter(Boolean),
+          superadmins: modal.superStr.split(',').map(s=>s.trim()).filter(Boolean),
+          spartenadmins
+        };
+        const method = modal.isNew ? 'POST' : 'PUT';
+        const url = modal.isNew ? '/api/chapters' : `/api/chapters/${modal.form.id}`;
+        const res = await apiFetch(url, { method, body: JSON.stringify(payload) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error||'Fehler');
+        modal.open = false;
+        showToast('Chapter gespeichert');
+        await load();
+      } catch(e) { modal.error = e.message; }
+      finally { modal.saving = false; }
+    }
+
+    onMounted(load);
+    return { user, i18n, chapters, loading, modal, toast, openNew, openEdit, addSpartenAdminRow, save };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
+

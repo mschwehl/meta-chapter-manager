@@ -1,0 +1,8 @@
+node_modules
+.git
+database
+data
+docs
+*.md
+spec
+.dockerignore

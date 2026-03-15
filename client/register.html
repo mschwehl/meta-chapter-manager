@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCM – Registrierung</title>
+  <script src="/vendor/tailwindcss-browser.js"></script>
+  <script src="/branding.js"></script>
+  <script src="/branding.custom.js" onerror="void 0"></script>
+</head>
+<body class="bg-gradient-to-br from-blue-900 to-blue-700 min-h-screen flex items-center justify-center p-4">
+  <div id="app" class="w-full max-w-sm">
+
+    <!-- Logo -->
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-20 h-20 bg-white rounded-2xl shadow-lg mb-4">
+        <span class="text-blue-800 text-3xl font-black">{{ branding.logoText }}</span>
+      </div>
+      <h1 class="text-white text-2xl font-bold">Registrierung</h1>
+      <p class="text-blue-200 text-sm mt-1">{{ branding.orgName }}</p>
+    </div>
+
+    <!-- Success state -->
+    <div v-if="sent" class="bg-white rounded-2xl shadow-2xl p-8 text-center">
+      <div class="text-5xl mb-4">✅</div>
+      <h2 class="text-gray-800 font-bold text-lg mb-2">Anfrage eingegangen!</h2>
+      <p class="text-gray-500 text-sm mb-6">Deine Registrierungsanfrage wurde übermittelt. Ein Organisations-Admin wird sie prüfen und dein Konto freischalten.</p>
+      <a href="/login.html" class="block w-full py-2.5 bg-blue-600 text-white font-semibold rounded-lg text-sm text-center hover:bg-blue-700 transition-colors">Zurück zum Login</a>
+    </div>
+
+    <!-- Form -->
+    <div v-else class="bg-white rounded-2xl shadow-2xl p-8">
+      <h2 class="text-gray-800 font-semibold text-lg mb-1">Neues Konto beantragen</h2>
+      <p class="text-gray-400 text-xs mb-6">Ein Admin prüft deine Anfrage und aktiviert dein Konto.</p>
+
+      <form @submit.prevent="submit">
+        <div class="mb-4">
+          <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Kürzel *</label>
+          <input v-model="form.kuerzel" type="text" placeholder="z.B. m123 (Personalnummer)"
+            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            required autocomplete="username" />
+          <p class="text-gray-400 text-[11px] mt-1">Kleinbuchstaben + Ziffern, z.B. s888</p>
+        </div>
+
+        <div class="mb-4">
+          <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Nachname *</label>
+          <input v-model="form.name" type="text" placeholder="Mustermann"
+            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            required />
+        </div>
+
+        <div class="mb-4">
+          <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Vorname *</label>
+          <input v-model="form.vorname" type="text" placeholder="Max"
+            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            required />
+        </div>
+
+        <div class="mb-6">
+          <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Bemerkung</label>
+          <textarea v-model="form.bemerkung" rows="2" placeholder="z.B. Abteilung, Kontakt, warum du dich registrierst …"
+            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"></textarea>
+        </div>
+
+        <div v-if="error" class="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {{ error }}
+        </div>
+
+        <button type="submit" :disabled="loading"
+          class="w-full py-3 bg-blue-700 text-white font-semibold rounded-lg hover:bg-blue-800 disabled:opacity-60 transition-colors text-sm">
+          <span v-if="loading">Wird gesendet …</span>
+          <span v-else>Registrierung beantragen</span>
+        </button>
+      </form>
+
+      <p class="text-center text-gray-400 text-xs mt-5">
+        Bereits registriert?
+        <a href="/login.html" class="text-blue-600 hover:underline font-medium">Anmelden</a>
+      </p>
+    </div>
+
+    <p class="text-center text-blue-300 text-xs mt-6">{{ branding.copyright }}</p>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp, ref, reactive } = Vue;
+
+    createApp({
+      setup() {
+        const form = reactive({ kuerzel: '', name: '', vorname: '', bemerkung: '' });
+        const error = ref('');
+        const loading = ref(false);
+        const sent = ref(false);
+
+        async function submit() {
+          error.value = '';
+          if (!/^[a-z0-9]+$/.test(form.kuerzel)) {
+            error.value = 'Kürzel darf nur Kleinbuchstaben und Ziffern enthalten.';
+            return;
+          }
+          loading.value = true;
+          try {
+            const res = await fetch('/api/auth/register', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ kuerzel: form.kuerzel, name: form.name, vorname: form.vorname, bemerkung: form.bemerkung })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Fehler beim Senden');
+            sent.value = true;
+          } catch (e) {
+            error.value = e.message;
+          } finally {
+            loading.value = false;
+          }
+        }
+
+        return { form, error, loading, sent, submit, branding: window.APP_BRANDING };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

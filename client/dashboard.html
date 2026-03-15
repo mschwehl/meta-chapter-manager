@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCM – Dashboard</title>
+  <script src="/vendor/tailwindcss-browser.js"></script>
+  <script src="/i18n.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="app">
+
+    <!-- Navbar -->
+    <nav class="bg-blue-700 text-white shadow-lg">
+      <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <span class="font-black text-xl tracking-tight">MCM</span>
+          <span class="text-blue-200 text-sm hidden sm:inline">MetaChapterManager</span>
+        </div>
+        <div class="flex items-center gap-4">
+          <span class="text-blue-100 text-sm">{{ user.vorname }} {{ user.name }}
+            <span class="text-blue-300">({{ user.kuerzel }})</span>
+          </span>
+          <a href="/change-password.html"
+            class="text-sm text-blue-200 hover:text-white transition-colors hidden sm:inline">
+            Passwort
+          </a>
+          <button @click="logout"
+            class="text-sm bg-blue-800 hover:bg-blue-900 px-3 py-1.5 rounded-lg transition-colors">
+            Abmelden
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <main class="max-w-6xl mx-auto px-6 py-8">
+
+      <!-- Begrüßung -->
+      <div class="mb-8">
+        <h1 class="text-2xl font-bold text-gray-800">Willkommen, {{ user.vorname }}!</h1>
+        <p class="text-gray-500 mt-1">Was möchten Sie heute tun?</p>
+
+        <!-- Rollenbadges -->
+        <div class="flex flex-wrap gap-2 mt-3">
+          <span v-if="isOrgaAdmin"
+            class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-700">
+            🏛 Organisations-Admin
+          </span>
+          <template v-for="(role, chapterId) in (user.roles || {})" :key="chapterId">
+            <span v-if="role === 'superadmin'"
+              class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">
+              🏢 Superadmin · {{ i18n.chapter(chapterId) }}
+            </span>
+            <template v-else-if="role && role.sparten">
+              <span v-for="sp in role.sparten" :key="sp"
+                class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                🏓 Spartenadmin · {{ i18n.sparte(sp) }} ({{ i18n.chapter(chapterId) }})
+              </span>
+            </template>
+          </template>
+          <span v-if="!isOrgaAdmin && Object.keys(user.roles || {}).length === 0"
+            class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">
+            👤 Mitglied
+          </span>
+        </div>
+      </div>
+
+      <!-- Aktionskacheln -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-10">
+
+        <!-- Hauptaktion: Prüfe Veranstaltung -->
+        <a href="/pruefe.html"
+          class="bg-white rounded-xl shadow hover:shadow-md border-l-4 border-blue-600 p-6 flex items-start gap-4 cursor-pointer transition-shadow">
+          <div class="text-4xl leading-none">📋</div>
+          <div>
+            <div class="font-semibold text-gray-800 text-base">Prüfe Veranstaltung</div>
+            <div class="text-gray-500 text-sm mt-1">PDF hochladen, Teilnehmer prüfen und Freigabeliste erstellen</div>
+          </div>
+        </a>
+
+        <!-- Neue Veranstaltung -->
+        <a href="/event-neu.html"
+          class="bg-white rounded-xl shadow hover:shadow-md border-l-4 border-green-500 p-6 flex items-start gap-4 cursor-pointer transition-shadow">
+          <div class="text-4xl leading-none">➕</div>
+          <div>
+            <div class="font-semibold text-gray-800 text-base">Neue Veranstaltung</div>
+            <div class="text-gray-500 text-sm mt-1">Sportstunde erfassen und zur Freigabe einreichen</div>
+          </div>
+        </a>
+
+        <!-- Archiv -->
+        <div class="bg-white rounded-xl shadow hover:shadow-md border-l-4 border-gray-300 p-6 flex items-start gap-4 opacity-60">
+          <div class="text-4xl leading-none">🗂</div>
+          <div>
+            <div class="font-semibold text-gray-800 text-base">Archiv</div>
+            <div class="text-gray-500 text-sm mt-1">Alle freigegebenen Veranstaltungen einsehen (demnächst)</div>
+          </div>
+        </div>
+
+        <!-- Mitglieder (Spartenadmin / Superadmin / OrgaAdmin) -->
+        <a v-if="canSeeMembers" href="/members.html"
+          class="bg-white rounded-xl shadow hover:shadow-md border-l-4 border-indigo-500 p-6 flex items-start gap-4 cursor-pointer transition-shadow">
+          <div class="text-4xl leading-none">👥</div>
+          <div>
+            <div class="font-semibold text-gray-800 text-base">Mitglieder</div>
+            <div class="text-gray-500 text-sm mt-1">Mitglieder verwalten, anlegen und deaktivieren</div>
+          </div>
+        </a>
+
+        <!-- Chapter (Superadmin / OrgaAdmin) -->
+        <a v-if="canSeeChapters" href="/chapters.html"
+          class="bg-white rounded-xl shadow hover:shadow-md border-l-4 border-purple-500 p-6 flex items-start gap-4 cursor-pointer transition-shadow">
+          <div class="text-4xl leading-none">🏢</div>
+          <div>
+            <div class="font-semibold text-gray-800 text-base">Chapter</div>
+            <div class="text-gray-500 text-sm mt-1">Spartenstruktur und Adminrollen verwalten</div>
+          </div>
+        </a>
+
+        <!-- Organisation (OrgaAdmin only) -->
+        <a v-if="canSeeOrga" href="/orga.html"
+          class="bg-white rounded-xl shadow hover:shadow-md border-l-4 border-rose-500 p-6 flex items-start gap-4 cursor-pointer transition-shadow">
+          <div class="text-4xl leading-none">🏛</div>
+          <div>
+            <div class="font-semibold text-gray-800 text-base">Organisation</div>
+            <div class="text-gray-500 text-sm mt-1">Verband und Chapter-Übersicht verwalten</div>
+          </div>
+        </a>
+
+      </div>
+
+      <!-- Offene Events Tabelle -->
+      <div>
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold text-gray-700">Offene Veranstaltungen</h2>
+          <div class="flex gap-2">
+            <select v-model="filter.status" @change="loadEvents"
+              class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400">
+              <option value="">Alle Status</option>
+              <option v-for="opt in i18n.eventStatusOptions()" :key="opt.key" :value="opt.key">
+                {{ opt.label }}
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div v-if="loading" class="text-gray-400 text-center py-10">Lade Veranstaltungen …</div>
+
+        <div v-else-if="events.length === 0"
+          class="bg-white rounded-xl shadow p-10 text-center text-gray-400">
+          Keine Veranstaltungen gefunden.
+        </div>
+
+        <div v-else class="bg-white rounded-xl shadow overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-500 uppercase text-xs tracking-wide">
+              <tr>
+                <th class="px-5 py-3 text-left">Datum</th>
+                <th class="px-5 py-3 text-left">Chapter</th>
+                <th class="px-5 py-3 text-left">Sparte</th>
+                <th class="px-5 py-3 text-left">Ort</th>
+                <th class="px-5 py-3 text-left">Erstellt von</th>
+                <th class="px-5 py-3 text-left">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="ev in events" :key="ev.id" class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-5 py-3 font-medium">{{ ev.datum }}</td>
+                <td class="px-5 py-3 text-gray-600">{{ i18n.chapter(ev.chapterId) }}</td>
+                <td class="px-5 py-3 text-gray-600">{{ i18n.sparte(ev.sparte) }}</td>
+                <td class="px-5 py-3 text-gray-600">{{ ev.ort || '–' }}</td>
+                <td class="px-5 py-3 text-gray-500">{{ ev.erstelltVon }}</td>
+                <td class="px-5 py-3">
+                  <span :class="statusClass(ev.status)"
+                    class="px-2 py-0.5 rounded-full text-xs font-medium">
+                    {{ i18n.eventStatus(ev.status) }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp, ref, reactive, computed, onMounted } = Vue;
+
+    createApp({
+      setup() {
+        const token = localStorage.getItem('token');
+        if (!token) { window.location.href = '/login.html'; }
+        const user = ref(JSON.parse(localStorage.getItem('user') || '{}'));
+        const events = ref([]);
+        const loading = ref(true);
+        const filter = reactive({ status: 'offen' });
+        const i18n = MCM_I18N;
+
+        // Role helpers
+        const isOrgaAdmin = computed(() => !!user.value.orgaAdmin);
+        const isSuperadminAnywhere = computed(() => {
+          if (isOrgaAdmin.value) return true;
+          const roles = user.value.roles || {};
+          return Object.values(roles).some(r => r === 'superadmin');
+        });
+        const hasAnyChapterRole = computed(() => {
+          return Object.keys(user.value.roles || {}).length > 0;
+        });
+        const canSeeMembers = computed(() => isOrgaAdmin.value || hasAnyChapterRole.value);
+        const canSeeChapters = computed(() => isSuperadminAnywhere.value);
+        const canSeeOrga = computed(() => isOrgaAdmin.value);
+
+        function statusClass(status) {
+          return {
+            'offen': 'bg-yellow-100 text-yellow-700',
+            'freigegeben': 'bg-green-100 text-green-700',
+            'abgelehnt': 'bg-red-100 text-red-700'
+          }[status] || 'bg-gray-100 text-gray-600';
+        }
+
+        async function loadEvents() {
+          loading.value = true;
+          try {
+            const params = new URLSearchParams();
+            if (filter.status) params.set('status', filter.status);
+            const res = await fetch(`/api/events?${params}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.status === 401) { window.location.href = '/login.html'; return; }
+            events.value = await res.json();
+          } catch (e) {
+            console.error(e);
+          } finally {
+            loading.value = false;
+          }
+        }
+
+        function logout() {
+          localStorage.clear();
+          window.location.href = '/login.html';
+        }
+
+        onMounted(loadEvents);
+
+        return { user, events, loading, filter, statusClass, loadEvents, logout, i18n,
+          isOrgaAdmin, isSuperadminAnywhere, hasAnyChapterRole, canSeeMembers, canSeeChapters, canSeeOrga };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

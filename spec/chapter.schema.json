@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "chapter.schema.json",
+  "title": "Chapter",
+  "description": "Ein Chapter (Verein / Abteilung) innerhalb der Organisation. Datei: chapter/{id}/chapter.json",
+  "type": "object",
+  "required": ["id", "name", "admins"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Kürzel des Chapters – entspricht dem Ordnernamen unter chapter/"
+    },
+    "name": {
+      "type": "string",
+      "description": "Anzeigename des Chapters"
+    },
+    "admins": {
+      "type": "array",
+      "description": "Benutzer-Kürzel der Chapter-Admins",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "gegruendet": {
+      "description": "Gründungsdatum des Chapters im Format YYYY-MM-DD oder null",
+      "oneOf": [
+        { "type": "string", "format": "date" },
+        { "type": "null" }
+      ]
+    },
+    "sparten": {
+      "type": "array",
+      "description": "Sparten des Chapters – wird beim Lesen aus den einzelnen sparte/{id}.json Dateien zusammengeführt (API-Response-Shape, nicht gespeichert in chapter.json selbst)",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "admins"],
+        "properties": {
+          "id": { "type": "string", "description": "Kürzel der Sparte" },
+          "name": { "type": "string", "description": "Anzeigename der Sparte" },
+          "admins": {
+            "type": "array",
+            "description": "Benutzer-Kürzel der Spartenadmins",
+            "items": { "type": "string" },
+            "uniqueItems": true
+          },
+          "datumAngelegt": {
+            "description": "Gründungsdatum der Sparte oder null",
+            "oneOf": [{ "type": "string", "format": "date" }, { "type": "null" }]
+          },
+          "datumStillgelegt": {
+            "description": "Stilllegungsdatum der Sparte oder null",
+            "oneOf": [{ "type": "string", "format": "date" }, { "type": "null" }]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

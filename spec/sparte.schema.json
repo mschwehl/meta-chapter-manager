@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sparte.schema.json",
+  "title": "Sparte",
+  "description": "Eine Sportsparte innerhalb eines Chapters. Datei: chapter/{chapterId}/sparte/{id}.json",
+  "type": "object",
+  "required": ["id", "name", "admins"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Kürzel der Sparte – entspricht dem Dateinamen (ohne .json)"
+    },
+    "name": {
+      "type": "string",
+      "description": "Anzeigename der Sparte"
+    },
+    "admins": {
+      "type": "array",
+      "description": "Benutzer-Kürzel der Spartenadmins (Spartenleiter)",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "datumAngelegt": {
+      "description": "Datum der Gründung der Sparte im Format YYYY-MM-DD oder null",
+      "oneOf": [
+        { "type": "string", "format": "date" },
+        { "type": "null" }
+      ]
+    },
+    "datumStillgelegt": {
+      "description": "Datum der Stilllegung der Sparte im Format YYYY-MM-DD oder null",
+      "oneOf": [
+        { "type": "string", "format": "date" },
+        { "type": "null" }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

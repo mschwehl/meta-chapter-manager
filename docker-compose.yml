@@ -1,0 +1,28 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      # Git database repository URL
+      # file:// for local bare repo, https:// for remote (set GIT_SSL_VERIFY=false for self-signed)
+      GIT_DB_URL: "${GIT_DB_URL:-}"
+      GIT_DB_BRANCH: "${GIT_DB_BRANCH:-develop}"
+      GIT_SSL_VERIFY: "${GIT_SSL_VERIFY:-true}"
+
+      # Paths inside container
+      DATA_DIR: /data
+      DOCS_DIR: /docs
+
+      # Security
+      JWT_SECRET: "${JWT_SECRET:-change-me-in-production}"
+    volumes:
+      # Persistent data volume (database working copy)
+      - db-data:/data
+      # Generated documents (DOCX etc.) - local, not in git
+      - docs-data:/docs
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  docs-data:

@@ -1,0 +1,41 @@
+﻿# Dependencies
+node_modules/
+server/node_modules/
+
+# Local data & generated docs (use GIT_DB_URL for remote data)
+data/
+docs/
+database/
+
+# Vendor files (downloaded via download-vendor.js)
+client/vendor/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Deployment-specific branding overrides (not committed to repo)
+client/branding.custom.js
+
+# Company-specific Word templates (mount via Docker volume)
+server/template/*-bamf.docx
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build output
+dist/
+build/
+

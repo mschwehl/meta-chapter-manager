@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "request.schema.json",
+  "title": "RegistrationRequest",
+  "description": "Registrierungsanfrage eines neuen Benutzers (ausstehende Genehmigung). Datei: requests/{kuerzel}-request.json",
+  "type": "object",
+  "required": ["kuerzel", "name", "vorname", "requestedAt"],
+  "properties": {
+    "kuerzel": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+$",
+      "maxLength": 30,
+      "description": "Gewünschtes Login-Kürzel (nur Kleinbuchstaben und Ziffern)"
+    },
+    "name": {
+      "type": "string",
+      "description": "Nachname des Antragstellers"
+    },
+    "vorname": {
+      "type": "string",
+      "description": "Vorname des Antragstellers"
+    },
+    "bemerkung": {
+      "type": "string",
+      "description": "Optionale Nachricht / Bemerkung des Antragstellers"
+    },
+    "requestedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Zeitpunkt des Eingangs der Anfrage (ISO 8601)"
+    }
+  },
+  "additionalProperties": false
+}

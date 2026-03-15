@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "event.schema.json",
+  "title": "Event",
+  "description": "Eine Veranstaltung (Sporteinheit) einer Sparte. Datei: chapter/{chapterId}/events/{id}.json",
+  "type": "object",
+  "required": ["id", "chapterId", "sparte", "datum", "erstelltVon", "erstelltAm", "status"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Eindeutige ID im Format {datum}-{sparte}-{timestamp}"
+    },
+    "chapterId": {
+      "type": "string",
+      "description": "ID des Chapters, dem dieses Event gehört"
+    },
+    "sparte": {
+      "type": "string",
+      "description": "ID der Sparte, für die das Event angelegt wurde"
+    },
+    "datum": {
+      "type": "string",
+      "format": "date",
+      "description": "Datum der Veranstaltung im Format YYYY-MM-DD"
+    },
+    "von": {
+      "type": "string",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+      "description": "Startzeit im Format HH:MM"
+    },
+    "bis": {
+      "type": "string",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+      "description": "Endzeit im Format HH:MM"
+    },
+    "ort": {
+      "type": "string",
+      "description": "Veranstaltungsort"
+    },
+    "erstelltVon": {
+      "type": "string",
+      "description": "Kürzel des Benutzers, der das Event angelegt hat"
+    },
+    "erstelltAm": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Erstellungszeitpunkt (ISO 8601)"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["offen", "freigegeben", "abgelehnt"],
+      "description": "Aktueller Prüfstatus des Events"
+    },
+    "freigaben": {
+      "type": "array",
+      "description": "Liste der Freigabe- oder Ablehnungseinträge",
+      "items": {
+        "type": "object",
+        "required": ["von", "am"],
+        "properties": {
+          "von": {
+            "type": "string",
+            "description": "Kürzel des Prüfers"
+          },
+          "am": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Zeitpunkt der Freigabe / Ablehnung (ISO 8601)"
+          },
+          "kommentar": {
+            "type": "string",
+            "description": "Optionaler Kommentar"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

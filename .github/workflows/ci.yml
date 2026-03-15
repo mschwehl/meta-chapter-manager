@@ -1,0 +1,85 @@
+name: CI
+
+# Gitflow CI — runs on branch pushes and PRs only.
+# Tags are intentionally excluded — releases are handled by release.yml.
+#
+# Branch → Docker tag mapping:
+#   main     →  :edge        (latest integration, not yet released)
+#   develop  →  :develop     (active development snapshot)
+#   PR       →  build only, no push
+#   nightly  →  :nightly     (scheduled, always from main)
+
+on:
+  push:
+    branches: [main, develop]
+    tags-ignore:
+      - '**'    # never run on tags — that is release.yml's job
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 2 * * *'   # nightly from default branch
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  DOCKERHUB_IMAGE: mschwehl/meta-chapter-manager
+
+jobs:
+
+  # ============================
+  # BUILD & PUSH
+  # ============================
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+            ${{ env.DOCKERHUB_IMAGE }}
+          tags: |
+            # main → :edge (integrated but not yet released)
+            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
+            # develop → :develop
+            type=raw,value=develop,enable=${{ github.ref == 'refs/heads/develop' }}
+            # scheduled nightly → :nightly
+            type=raw,value=nightly,enable=${{ github.event_name == 'schedule' }}
+            # always tag with commit sha for traceability
+            type=sha,prefix=sha-
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "organisation.schema.json",
+  "title": "Organisation",
+  "description": "Root-Datei der Datenbank – beschreibt die Dachorganisation. Datei: organisation.json",
+  "type": "object",
+  "required": ["id", "name", "chapters", "orgAdmins"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Eindeutige ID der Organisation"
+    },
+    "name": {
+      "type": "string",
+      "description": "Offizieller Name der Organisation"
+    },
+    "chapters": {
+      "type": "array",
+      "description": "Liste der Chapter-IDs (Kürzel), die zu dieser Organisation gehören",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "orgAdmins": {
+      "type": "array",
+      "description": "Benutzer-Kürzel mit Orga-Admin-Rechten",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "zeitstelle": {
+      "type": "array",
+      "description": "Benutzer-Kürzel der Zeitstelle",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "emails": {
+      "type": "object",
+      "properties": {
+        "zeitstelle": {
+          "type": "string",
+          "description": "E-Mail-Adresse der Zeitstelle"
+        },
+        "domain": {
+          "type": "string",
+          "description": "Standard-Domain für automatisch generierte Adressen"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

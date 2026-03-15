@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "user.schema.json",
+  "title": "User",
+  "description": "Ein Benutzer / Mitglied der Organisation. Datei: user/{kuerzel}.json",
+  "type": "object",
+  "required": ["kuerzel", "name", "vorname", "chapters"],
+  "properties": {
+    "kuerzel": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+$",
+      "maxLength": 30,
+      "description": "Eindeutiges Login-Kürzel (nur Kleinbuchstaben und Ziffern)"
+    },
+    "name": {
+      "type": "string",
+      "description": "Nachname"
+    },
+    "vorname": {
+      "type": "string",
+      "description": "Vorname"
+    },
+    "chapters": {
+      "type": "array",
+      "description": "Mitgliedschaften in Chapters und Sparten",
+      "items": {
+        "type": "object",
+        "required": ["chapterId", "sparte", "eintrittsdatum", "status"],
+        "properties": {
+          "chapterId": {
+            "type": "string",
+            "description": "ID des Chapters"
+          },
+          "sparte": {
+            "type": "string",
+            "description": "ID der Sparte innerhalb des Chapters"
+          },
+          "eintrittsdatum": {
+            "type": "string",
+            "format": "date",
+            "description": "Eintrittsdatum im Format YYYY-MM-DD"
+          },
+          "austrittsdatum": {
+            "description": "Austrittsdatum im Format YYYY-MM-DD oder null wenn noch aktiv",
+            "oneOf": [
+              { "type": "string", "format": "date" },
+              { "type": "null" }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["aktiv", "inaktiv", "gesperrt"],
+            "description": "Aktueller Mitgliedschaftsstatus"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
