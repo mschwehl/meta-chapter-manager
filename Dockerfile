@@ -2,6 +2,14 @@ FROM node:20-alpine
 
 RUN apk add --no-cache git
 
+# Create a non-root user (UID 1001).
+# OpenShift runs containers with an arbitrary UID but always GID=0 (root group).
+# We create a home dir and pre-populate a .gitconfig that marks every directory
+# as safe so git works regardless of the runtime UID assigned by OpenShift.
+RUN adduser -u 1001 -G root -H -D mcm \
+ && mkdir -p /home/mcm \
+ && printf '[safe]\n    directory = *\n' > /home/mcm/.gitconfig
+
 WORKDIR /app
 
 # Install dependencies first (layer caching)
@@ -12,19 +20,33 @@ RUN cd server && npm ci --omit=dev
 COPY server/ ./server/
 COPY client/ ./client/
 
+# Apply OpenShift group-write pattern:
+# chown to 1001:0 then chmod g=u so any UID with GID=0 (OpenShift's default)
+# has the same filesystem access as the declared owner.
+RUN chown -R 1001:0 /app /home/mcm \
+ && chmod -R g=u /app /home/mcm
+
 # Volumes for persistent data
+# Note: the PVC mounted at /data must be writable by the container's GID (0).
+# On OpenShift, set fsGroup: 0 in the Pod's securityContext, or use an anyuid SCC.
 VOLUME ["/data"]
 
 # Environment
+# JWT_SECRET is intentionally absent – the server refuses to start without it.
+# Set it via a Kubernetes Secret or docker run -e JWT_SECRET=<strong-random-value>
 ENV PORT=3000 \
     DATA_DIR=/data \
     GIT_DB_URL="" \
     GIT_DB_BRANCH=develop \
     GIT_SSL_VERIFY=true \
-    JWT_SECRET=change-me-in-production \
+    CORS_ORIGIN="" \
+    LOG_LEVEL=info \
+    HOME=/home/mcm \
     NODE_OPTIONS="--max-old-space-size=256 --optimize-for-size"
 
 EXPOSE 3000
+
+USER 1001
 
 WORKDIR /app/server
 CMD ["node", "--expose-gc", "index.js"]
