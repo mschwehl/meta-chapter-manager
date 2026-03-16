@@ -5,7 +5,7 @@
  */
 const EventsList = {
   name: 'EventsList',
-  inject: ['api', 'apiPost', 'i18n', 'user', 'prChapters', 'statusCls', 'isOrgaAdmin', 'isZeitstelle', 'isSuperadminAnywhere'],
+  inject: ['api', 'apiPost', 'i18n', 'user', 'prChapters', 'statusCls', 'isOrgaAdmin', 'isZeitstelle', 'isSuperadminAnywhere', 'sseEvent'],
   data() {
     return {
       events: [],
@@ -54,6 +54,12 @@ const EventsList = {
         const r = await this.api(`/api/events?${p}`);
         this.events = await r.json();
       } catch {} finally { this.loading = false; }
+    },
+  },
+  watch: {
+    sseEvent(evt) {
+      if (!evt) return;
+      if (evt.category === 'event') this.load();
     },
   },
   mounted() { this.load(); },

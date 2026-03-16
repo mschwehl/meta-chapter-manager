@@ -5,7 +5,7 @@
  */
 const MemberManager = {
   name: 'MemberManager',
-  inject: ['api', 'apiPost', 'apiPut', 'i18n', 'user', 'prChapters', 'isOrgaAdmin', 'isSuperadminAnywhere', 'hasAnyChapterRole', 'isActive'],
+  inject: ['api', 'apiPost', 'apiPut', 'i18n', 'user', 'prChapters', 'isOrgaAdmin', 'isSuperadminAnywhere', 'hasAnyChapterRole', 'isActive', 'sseEvent'],
   data() {
     return {
       members: [],
@@ -139,6 +139,12 @@ const MemberManager = {
       this.chapterError = '';
       // Pre-fill chapter for chapter-admins
       if (this.chapter) this.addCh.chapterId = this.chapter;
+    },
+  },
+  watch: {
+    sseEvent(evt) {
+      if (!evt) return;
+      if (evt.category === 'user') this.load();
     },
   },
   mounted() {

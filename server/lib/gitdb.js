@@ -4,6 +4,8 @@ const simpleGit = require('simple-git');
 const config = require('../config');
 const logger = require('./logger');
 
+const sse = require('./sse');
+
 let DB_PATH = config.dataDir;
 let _isDemoMode = false;
 
@@ -136,14 +138,46 @@ async function readJson(filePath) {
 }
 
 async function writeJson(filePath, data, commitMessage, authorKuerzel) {
+  // Validate: serialize first, then write — guarantees only valid JSON hits disk
+  let json;
+  try {
+    json = JSON.stringify(data, null, 2);
+  } catch (err) {
+    logger.error('writeJson.serialize_failed', { file: path.basename(filePath), err: err.message });
+    throw new Error('Daten können nicht als JSON gespeichert werden');
+  }
+  if (!json || json === 'null' || json === 'undefined') {
+    throw new Error('writeJson: leere oder ungültige Daten');
+  }
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
+  await fs.writeFile(filePath, json, 'utf-8');
   await gitSave(commitMessage || 'Update', authorKuerzel);
+  const cat = _fileCategory(filePath);
+  if (cat !== 'credentials') {
+    sse.broadcast('invalidate', { category: cat, id: path.basename(filePath, '.json'), action: 'write', by: authorKuerzel || 'system' });
+  }
 }
 
 async function deleteJson(filePath) {
   await fs.unlink(filePath);
   await gitSave(`Gelöscht: ${path.basename(filePath)}`, 'system');
+  const cat = _fileCategory(filePath);
+  if (cat !== 'credentials') {
+    sse.broadcast('invalidate', { category: cat, id: path.basename(filePath, '.json'), action: 'delete' });
+  }
+}
+
+/** Derive a category from the file path (user, chapter, event, request, etc.). */
+function _fileCategory(filePath) {
+  const rel = path.relative(DB_PATH, filePath).replace(/\\/g, '/');
+  if (rel.startsWith('user/'))        return 'user';
+  if (rel.startsWith('requests/'))    return 'request';
+  if (rel === 'organisation.json')    return 'organisation';
+  if (rel === 'credentials.json')     return 'credentials';
+  if (rel.includes('/events/'))       return 'event';
+  if (rel.includes('/sparte/'))       return 'sparte';
+  if (rel.includes('/chapter'))       return 'chapter';
+  return 'other';
 }
 
 /**

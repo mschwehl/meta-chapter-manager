@@ -15,8 +15,10 @@ const docsRoutes = require('./routes/docs');
 const requestsRoutes = require('./routes/requests');
 const { authMiddleware } = require('./middleware/auth');
 const { initDatabase, startAutoSync, gitCommitAndPush, readUser, isDemoMode, readOrganisation } = require('./lib/gitdb');
+const sse = require('./lib/sse');
 const { version: APP_VERSION } = require('./package.json');
 const logger = require('./lib/logger');
+const jwt = require('jsonwebtoken');
 
 const rateLimit = require('express-rate-limit');
 
@@ -48,6 +50,31 @@ app.get('/api/status', async (_req, res) => {
   let orgName = null;
   try { const org = await readOrganisation(); orgName = org.name || null; } catch { /* db may not be ready yet */ }
   res.json({ demoMode: isDemoMode(), orgName, version: APP_VERSION });
+});
+
+// GET /api/sse – Server-Sent Events stream (token via query param)
+app.get('/api/sse', (req, res) => {
+  const token = req.query.token;
+  if (!token) return res.status(401).end();
+  try {
+    const payload = jwt.verify(token, config.jwtSecret);
+    const { getRevokedAt } = require('./lib/gitdb');
+    const revokedAt = getRevokedAt(payload.kuerzel);
+    if (revokedAt && payload.iat * 1000 < revokedAt) return res.status(401).end();
+  } catch { return res.status(401).end(); }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.write(':\n\n'); // initial comment to flush
+  sse.addClient(res);
+
+  // Keep-alive every 30s
+  const keepAlive = setInterval(() => { try { res.write(':\n\n'); } catch { clearInterval(keepAlive); } }, 30000);
+  res.on('close', () => clearInterval(keepAlive));
 });
 
 // Protected routes (JWT required)
@@ -115,6 +142,7 @@ async function start() {
 
   app.listen(config.port, () => {
     logger.info('startup.listen', { port: config.port, demoMode: isDemoMode() });
+    console.log(`Server started on http://localhost:${config.port}`);
   });
 }
 

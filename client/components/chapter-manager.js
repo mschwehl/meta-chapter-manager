@@ -11,7 +11,7 @@
 const ChapterManager = {
   name: 'ChapterManager',
   inject: ['api', 'apiPost', 'apiPut', 'i18n', 'user', 'ctx', 'isOrgaAdmin', 'isSuperadminAnywhere',
-           'userNameCache', 'uPickSearch', 'uPickAdd', 'uPickRemove', 'uPickKeydown', 'isActive'],
+           'userNameCache', 'uPickSearch', 'uPickAdd', 'uPickRemove', 'uPickKeydown', 'isActive', 'sseEvent'],
   emits: ['navigate'],
   data() {
     return {
@@ -296,6 +296,11 @@ const ChapterManager = {
   },
   watch: {
     chSelected(cid) { this.onSelectedChange(cid); },
+    sseEvent(evt) {
+      if (!evt) return;
+      if (evt.category === 'chapter' || evt.category === 'sparte') this.loadChaptersList();
+      if (evt.category === 'user' || evt.category === 'request') { this.loadChapterMembers(); if (this.isOrgaAdmin) this.loadRequests(); }
+    },
   },
   mounted() {
     // Pre-select chapter from context if applicable

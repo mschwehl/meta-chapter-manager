@@ -102,6 +102,11 @@
           <svg class="w-3.5 h-3.5 shrink-0" :class="syncing ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
           <span class="font-medium">{{ syncStatus.label }}</span>
         </button>
+        <!-- Online indicator -->
+        <span class="hidden sm:inline-flex items-center gap-1 text-[10px] font-medium" :title="serverOnline ? 'Server verbunden' : 'Server nicht erreichbar'">
+          <span class="w-1.5 h-1.5 rounded-full" :class="serverOnline ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-red-400 shadow-sm shadow-red-400/50 animate-pulse'"></span>
+          <span :class="serverOnline ? 'text-gray-500' : 'text-red-400'">{{ serverOnline ? 'Online' : 'Offline' }}</span>
+        </span>
         <!-- Demo badge -->
         <span v-if="demoMode" class="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30" title="Demo-Modus">
           DEMO
@@ -468,6 +473,48 @@ const app = createApp({
 
     // ── User-picker helpers (shared via provide) ──
     let _uPickTimer = null;
+
+    // ── Server connectivity (ping + SSE) ──
+    const serverOnline = ref(true);
+    const sseEvent = ref(null);  // last SSE invalidate event { category, id, action, by }
+
+    // Ping: check /api/status every 25s
+    let _pingTimer = null;
+    async function pingServer() {
+      try {
+        const r = await fetch('/api/status', { cache: 'no-store' });
+        serverOnline.value = r.ok;
+      } catch { serverOnline.value = false; }
+    }
+    function startPing() {
+      pingServer();
+      _pingTimer = setInterval(pingServer, 25000);
+    }
+
+    // SSE: connect to /api/sse
+    let _evtSource = null;
+    function connectSSE() {
+      if (_evtSource) { _evtSource.close(); _evtSource = null; }
+      _evtSource = new EventSource(`/api/sse?token=${encodeURIComponent(token)}`);
+      _evtSource.addEventListener('invalidate', (e) => {
+        try {
+          const evt = JSON.parse(e.data);
+          sseEvent.value = evt;
+          // Auto-reload shared data based on category
+          if (evt.category === 'chapter' || evt.category === 'sparte') { loadChapters(); loadDirectory(); }
+          if (evt.category === 'organisation') loadOrg();
+          if (evt.category === 'user' && evt.id === user.value.kuerzel) {
+            // Own profile changed (e.g. role update by admin) — refresh
+            api('/api/me').then(r => r.json()).then(u => { user.value = u; MCM_STORE.set('user', JSON.stringify(u)); }).catch(() => {});
+          }
+        } catch {}
+      });
+      _evtSource.onopen = () => { serverOnline.value = true; };
+      _evtSource.onerror = () => { serverOnline.value = false; };
+    }
+
+    startPing();
+    connectSSE();
     function uPickSearch(picker) {
       clearTimeout(_uPickTimer);
       if (picker.search.length < 2) { picker.results = []; picker.activeIdx = -1; return; }
@@ -522,6 +569,8 @@ const app = createApp({
     provide('uPickAdd', uPickAdd);
     provide('uPickRemove', uPickRemove);
     provide('uPickKeydown', uPickKeydown);
+    provide('serverOnline', serverOnline);
+    provide('sseEvent', sseEvent);
 
     // ── Module switching: load shared data ──
     watch(mod, (m) => {
@@ -598,7 +647,7 @@ const app = createApp({
       logout, statusCls, userMenu,
       ctx, ctxOptions, selectCtx, ctxPath, ctxModules,
       syncing, syncStatus, triggerSync,
-      demoMode, chapterDirectory,
+      demoMode, chapterDirectory, serverOnline,
       branding: window.APP_BRANDING || {},
     };
   }

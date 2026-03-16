@@ -8,7 +8,7 @@
  */
 const UserAdmin = {
   name: 'UserAdmin',
-  inject: ['api', 'apiPost', 'apiPut', 'i18n', 'user', 'prChapters', 'isOrgaAdmin', 'isActive'],
+  inject: ['api', 'apiPost', 'apiPut', 'i18n', 'user', 'prChapters', 'isOrgaAdmin', 'isActive', 'sseEvent'],
   data() {
     return {
       users: [],
@@ -119,6 +119,12 @@ const UserAdmin = {
       const a = document.createElement('a');
       a.href = url; a.download = 'mitglieder.xlsx'; a.click();
       URL.revokeObjectURL(url);
+    },
+  },
+  watch: {
+    sseEvent(evt) {
+      if (!evt) return;
+      if (evt.category === 'user') this.load();
     },
   },
   mounted() { this.load(); },
