@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MCM – Mitgliederverwaltung</title>
   <script src="/vendor/tailwindcss-browser.js"></script>
+  <script src="/store.js"></script>
   <script src="/i18n.js"></script>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -174,8 +175,8 @@
 const { createApp, ref, reactive, computed, onMounted } = Vue;
 createApp({
   setup() {
-    const token = localStorage.getItem('token');
-    const user = ref(JSON.parse(localStorage.getItem('user') || '{}'));
+    const token = MCM_STORE.get('token');
+    const user = ref(JSON.parse(MCM_STORE.get('user') || '{}'));
     if (!token) window.location.href = '/login.html';
     const i18n = MCM_I18N;
 

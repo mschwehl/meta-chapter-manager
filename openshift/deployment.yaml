@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: meta-chapter-manager
+  labels:
+    app: meta-chapter-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: meta-chapter-manager
+  strategy:
+    type: Recreate          # single replica + RWO PVC – Rolling would cause mount conflicts
+  template:
+    metadata:
+      labels:
+        app: meta-chapter-manager
+    spec:
+      # GID 0 ensures any OpenShift-assigned UID still has write access to the
+      # PVC because the image pre-owns /data with chown 1001:0 + chmod g=u.
+      securityContext:
+        fsGroup: 0
+
+      containers:
+        - name: app
+          image: mschwehl/meta-chapter-manager:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+              protocol: TCP
+          env:
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: meta-chapter-manager
+                  key: JWT_SECRET
+            - name: GIT_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: meta-chapter-manager
+                  key: GIT_DB_USER
+            - name: GIT_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: meta-chapter-manager
+                  key: GIT_DB_PASSWORD
+            # Override these as needed:
+            - name: GIT_DB_URL
+              value: ""           # leave empty to use the local /data volume
+            - name: GIT_DB_BRANCH
+              value: "develop"
+            - name: LOG_LEVEL
+              value: "info"
+            - name: CORS_ORIGIN
+              value: ""           # "" = same-origin; "*" = allow all (dev only)
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 384Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /api/status
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/status
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: meta-chapter-manager-data

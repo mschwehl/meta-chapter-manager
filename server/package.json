@@ -5,13 +5,14 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js",
+    "dev": "cross-env NODE_ENV=development JWT_SECRET=dev-only-insecure-secret-do-not-use-in-production node --watch index.js",
     "setup": "node setup.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "docx": "^8.5.0",
+    "exceljs": "^4.4.0",
     "express": "^4.18.2",
     "express-rate-limit": "^7.5.1",
     "jsonwebtoken": "^9.0.2",
@@ -19,5 +20,8 @@
     "pdf-parse": "^1.1.1",
     "pizzip": "^3.2.0",
     "simple-git": "^3.22.0"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0"
   }
 }

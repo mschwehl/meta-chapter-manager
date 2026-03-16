@@ -98,6 +98,12 @@ const PruefeWizard = {
       this.$nextTick(() => this.$refs.searchRef?.focus());
     },
     remove(p) { this.matched = this.matched.filter(m => m.kuerzel !== p.kuerzel); },
+    memberChapter(u) {
+      return (u.chapters||[]).find(c => c.chapterId === this.event.chapterId && c.sparte === this.event.sparte)
+             || (u.chapters||[]).find(c => c.chapterId === this.event.chapterId)
+             || (u.chapters||[]).find(c => c.status === 'aktiv')
+             || (u.chapters||[])[0] || null;
+    },
     entryDate(u) {
       const ch = (u.chapters||[]).find(c => c.chapterId === this.event.chapterId && c.sparte === this.event.sparte)
              || (u.chapters||[]).find(c => c.chapterId === this.event.chapterId);
@@ -274,6 +280,8 @@ const PruefeWizard = {
                 <th class="px-4 py-2 text-left w-8">#</th>
                 <th class="px-4 py-2 text-left">Name</th>
                 <th class="px-4 py-2 text-left">Kürzel</th>
+                <th class="px-4 py-2 text-left">Chapter</th>
+                <th class="px-4 py-2 text-left">Sparte</th>
                 <th class="px-4 py-2 text-left">Mitgliedschaft</th>
                 <th class="px-4 py-2 text-left">Eintritt</th>
                 <th class="px-4 py-2 w-8"></th>
@@ -286,6 +294,8 @@ const PruefeWizard = {
                 <td class="px-4 py-2 text-gray-400 text-xs">{{ pi + 1 }}</td>
                 <td class="px-4 py-2 font-medium text-gray-800">{{ p.vorname }} {{ p.name }}</td>
                 <td class="px-4 py-2 font-mono text-gray-500 text-xs">{{ p.kuerzel }}</td>
+                <td class="px-4 py-2 text-gray-600 text-xs">{{ memberChapter(p) ? i18n.chapter(memberChapter(p).chapterId) : '–' }}</td>
+                <td class="px-4 py-2 text-gray-600 text-xs">{{ memberChapter(p) ? i18n.sparte(memberChapter(p).sparte) : '–' }}</td>
                 <td class="px-4 py-2"><span :class="validation(p).cls" class="px-2 py-0.5 rounded-full text-[11px] font-semibold">{{ validation(p).label }}</span></td>
                 <td class="px-4 py-2 text-gray-400 text-xs">{{ entryDate(p) || '–' }}</td>
                 <td class="px-4 py-2 text-right"><button @click="remove(p)" class="text-red-400 hover:text-red-600 text-xs">✕</button></td>
@@ -319,6 +329,7 @@ const PruefeWizard = {
         <thead class="bg-blue-700 text-white"><tr>
           <th class="px-3 py-2 text-left">Nr.</th><th class="px-3 py-2 text-left">Kürzel</th>
           <th class="px-3 py-2 text-left">Name</th><th class="px-3 py-2 text-left">Vorname</th>
+          <th class="px-3 py-2 text-left">Chapter</th><th class="px-3 py-2 text-left">Sparte</th>
           <th class="px-3 py-2 text-left">Mitgliedschaft</th>
         </tr></thead>
         <tbody>
@@ -328,6 +339,8 @@ const PruefeWizard = {
             <td class="px-3 py-1.5 font-mono text-gray-600">{{ p.kuerzel }}</td>
             <td class="px-3 py-1.5">{{ p.name }}</td>
             <td class="px-3 py-1.5">{{ p.vorname }}</td>
+            <td class="px-3 py-1.5 text-gray-600">{{ memberChapter(p) ? i18n.chapter(memberChapter(p).chapterId) : '–' }}</td>
+            <td class="px-3 py-1.5 text-gray-600">{{ memberChapter(p) ? i18n.sparte(memberChapter(p).sparte) : '–' }}</td>
             <td class="px-3 py-1.5"><span :class="validation(p).cls" class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold">{{ validation(p).label }}</span></td>
           </tr>
         </tbody>

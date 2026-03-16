@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const { DB_PATH, writeJson, deleteJson, readUser } = require('../lib/gitdb');
+const logger = require('../lib/logger');
 const fs = require('fs').promises;
 
 const router = express.Router();
@@ -28,7 +29,10 @@ async function readAllRequests() {
 
 // POST /api/auth/register  (public – no JWT)
 router.post('/register', async (req, res) => {
-  const { kuerzel, name, vorname, bemerkung } = req.body;
+  const kuerzel = (req.body.kuerzel || '').trim().toLowerCase();
+  const name = (req.body.name || '').trim();
+  const vorname = (req.body.vorname || '').trim();
+  const bemerkung = (req.body.bemerkung || '').trim();
   if (!kuerzel || !name || !vorname) {
     return res.status(400).json({ error: 'Kürzel, Name und Vorname erforderlich' });
   }
@@ -61,7 +65,7 @@ router.post('/register', async (req, res) => {
   };
 
   await writeJson(reqPath, requestData, `Registrierungsanfrage: ${kuerzel}`, 'system');
-  console.log(`[register] Anfrage eingegangen: ${kuerzel} (${vorname} ${name})`);
+  logger.info('register.request', { kuerzel, name, vorname });
   res.status(201).json({ message: 'Anfrage eingegangen' });
 });
 
@@ -76,6 +80,7 @@ router.get('/', async (req, res) => {
 router.post('/:kuerzel/approve', async (req, res) => {
   if (!req.user.orgaAdmin) return res.status(403).json({ error: 'Nur Orga-Admins' });
   const { kuerzel } = req.params;
+  if (!/^[a-z0-9]+$/.test(kuerzel)) return res.status(400).json({ error: 'Ungültiges Kürzel' });
 
   const reqPath = path.join(REQUESTS_DIR(), `${kuerzel}-request.json`);
   let requestData;
@@ -91,6 +96,7 @@ router.post('/:kuerzel/approve', async (req, res) => {
     kuerzel: requestData.kuerzel,
     name: requestData.name,
     vorname: requestData.vorname,
+    kontakte: [],
     chapters: []
   };
   const userPath = path.join(DB_PATH, 'user', `${kuerzel}.json`);
@@ -99,7 +105,7 @@ router.post('/:kuerzel/approve', async (req, res) => {
   // Delete the request file
   await deleteJson(reqPath);
 
-  console.log(`[register] Genehmigt: ${kuerzel} (by ${req.user.kuerzel})`);
+  logger.info('register.approved', { kuerzel, by: req.user.kuerzel });
   res.json({ message: `${kuerzel} genehmigt und angelegt`, user: userData });
 });
 
@@ -107,11 +113,12 @@ router.post('/:kuerzel/approve', async (req, res) => {
 router.delete('/:kuerzel', async (req, res) => {
   if (!req.user.orgaAdmin) return res.status(403).json({ error: 'Nur Orga-Admins' });
   const { kuerzel } = req.params;
+  if (!/^[a-z0-9]+$/.test(kuerzel)) return res.status(400).json({ error: 'Ungültiges Kürzel' });
 
   const reqPath = path.join(REQUESTS_DIR(), `${kuerzel}-request.json`);
   try {
     await deleteJson(reqPath);
-    console.log(`[register] Anfrage abgelehnt: ${kuerzel} (by ${req.user.kuerzel})`);
+    logger.info('register.rejected', { kuerzel, by: req.user.kuerzel });
     res.json({ message: `Anfrage für ${kuerzel} abgelehnt` });
   } catch {
     res.status(404).json({ error: 'Anfrage nicht gefunden' });

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: meta-chapter-manager
+  labels:
+    app: meta-chapter-manager
+spec:
+  selector:
+    app: meta-chapter-manager
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP

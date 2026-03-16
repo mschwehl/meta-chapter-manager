@@ -36,6 +36,7 @@ const ChapterManager = {
       // Eintritt / Austritt
       chEintritt: {},
       chAustrittPending: {},
+      chAustrittGrund: {},
       _eintrittTimer: null,
       // Create user inline
       chUserCreate: null,
@@ -211,9 +212,9 @@ const ChapterManager = {
         await this.loadChapterMembers();
       } catch (e) { this.chEintritt[chId + '_error'] = e.message; }
     },
-    async chDoAustritt(chId, row, datum) {
+    async chDoAustritt(chId, row, datum, grund) {
       try {
-        const r = await this.api(`/api/admin/users/${row.kuerzel}/chapter`, { method: 'PATCH', body: JSON.stringify({ chapterId: chId, sparte: row.sparte, status: 'passiv', austrittsdatum: datum }) });
+        const r = await this.api(`/api/admin/users/${row.kuerzel}/chapter`, { method: 'PATCH', body: JSON.stringify({ chapterId: chId, sparte: row.sparte, status: 'passiv', austrittsdatum: datum, austrittsgrund: grund || '' }) });
         if (!r.ok) { alert((await r.json()).error); return; }
         await this.loadChapterMembers();
       } catch (e) { alert(e.message); }
@@ -221,12 +222,14 @@ const ChapterManager = {
     async chConfirmAustritt(chId, row) {
       const key = chId + '|' + row.kuerzel + '|' + row.sparte;
       const datum = this.chAustrittPending[key] || new Date().toISOString().slice(0, 10);
-      await this.chDoAustritt(chId, row, datum);
+      const grund = this.chAustrittGrund[key] || '';
+      await this.chDoAustritt(chId, row, datum, grund);
       delete this.chAustrittPending[key];
+      delete this.chAustrittGrund[key];
     },
     async chDoReactivate(chId, row) {
       try {
-        const r = await this.api(`/api/admin/users/${row.kuerzel}/chapter`, { method: 'PATCH', body: JSON.stringify({ chapterId: chId, sparte: row.sparte, status: 'aktiv', austrittsdatum: null }) });
+        const r = await this.api(`/api/admin/users/${row.kuerzel}/chapter`, { method: 'PATCH', body: JSON.stringify({ chapterId: chId, sparte: row.sparte, status: 'aktiv', austrittsdatum: null, austrittsgrund: '' }) });
         if (!r.ok) { alert((await r.json()).error); return; }
         await this.loadChapterMembers();
       } catch (e) { alert(e.message); }
@@ -239,6 +242,15 @@ const ChapterManager = {
         this.chUserCreate = null;
         await this.loadChapterMembers();
       } catch (e) { this.chUserCreateError = e.message; }
+    },
+    async exportExcel() {
+      const r = await this.api('/api/admin/export/users.xlsx');
+      if (!r.ok) return;
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'mitglieder.xlsx'; a.click();
+      URL.revokeObjectURL(url);
     },
 
     // ── Requests ──
@@ -392,7 +404,8 @@ const ChapterManager = {
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
         <div><label class="lbl">ID</label><input v-model="chEdit.id" :disabled="chEditMode !== 'new'" class="ctrl" placeholder="mein-chapter" /></div>
         <div><label class="lbl">Name</label><input v-model="chEdit.name" class="ctrl" placeholder="z.B. Mein Verein" /></div>
-        <div><label class="lbl">Gegründet</label><input v-model="chEdit.gegruendet" class="ctrl" placeholder="z.B. 1985" /></div>
+        <div><label class="lbl">Gegründet</label><input type="date" v-model="chEdit.gegruendet" class="ctrl" placeholder="JJJJ-MM-TT" /></div>
+        <div><label class="lbl">Aufgelöst</label><input type="date" v-model="chEdit.aufgeloest" class="ctrl" placeholder="JJJJ-MM-TT" /></div>
       </div>
       <div class="mb-4">
         <label class="lbl">Sparten</label>
@@ -461,7 +474,11 @@ const ChapterManager = {
                 <h2 class="text-2xl font-bold text-gray-900">{{ ch.name }}</h2>
                 <span class="font-mono text-sm text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">{{ ch.id }}</span>
               </div>
-              <div v-if="ch.gegruendet" class="text-gray-500 text-sm mb-4">Gegründet {{ ch.gegruendet }}</div>
+              <div v-if="ch.gegruendet || ch.aufgeloest" class="text-gray-500 text-sm mb-4 flex items-center gap-3">
+                <span v-if="ch.gegruendet">Gegründet {{ ch.gegruendet }}</span>
+                <span v-if="ch.gegruendet && ch.aufgeloest" class="text-gray-300">·</span>
+                <span v-if="ch.aufgeloest" class="inline-flex items-center gap-1 text-red-500">Aufgelöst {{ ch.aufgeloest }}</span>
+              </div>
               <div class="flex flex-wrap gap-3 mt-4">
                 <button @click="chSelectedSparte = null; chShowMembers = true"
                   class="flex items-center gap-3 bg-blue-50 hover:bg-blue-100 border border-blue-100 rounded-xl px-4 py-3 transition-all group focus:outline-none">
@@ -573,7 +590,10 @@ const ChapterManager = {
         <div v-if="isOrgaAdmin && chShowMembers" class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-3">
           <div class="flex items-center justify-between">
             <div class="text-sm font-semibold text-gray-700">Alle Mitglieder</div>
-            <button @click="chShowMembers = false" class="text-gray-400 hover:text-gray-600 text-xs">✕ Schließen</button>
+            <div class="flex items-center gap-2">
+              <button @click="exportExcel" class="btn-sec text-xs flex items-center gap-1">📥 Excel</button>
+              <button @click="chShowMembers = false" class="text-gray-400 hover:text-gray-600 text-xs">✕ Schließen</button>
+            </div>
           </div>
           <input v-model="chMbFilter[ch.id]" placeholder="Filtern …" class="ctrl text-xs" />
           <div class="overflow-x-auto rounded-lg border border-gray-100">
@@ -610,21 +630,8 @@ const ChapterManager = {
         <div v-if="canManageChapterMembers(ch.id) && !isOrgaAdmin" class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4">
           <div class="flex items-center justify-between">
             <div class="text-sm font-semibold text-gray-700">Alle Mitglieder</div>
-            <button @click="chUserCreate = { kuerzel: '', name: '', vorname: '' }; chUserCreateError = ''" class="btn-sm text-xs">+ Neuer Benutzer</button>
-          </div>
-          <!-- Create user inline -->
-          <div v-if="chUserCreate" class="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
-            <div class="text-xs font-semibold text-blue-700 uppercase tracking-wide">👤 Neuen Benutzer anlegen</div>
-            <div class="grid grid-cols-3 gap-2">
-              <div><label class="lbl">Kürzel</label><input v-model="chUserCreate.kuerzel" class="ctrl text-xs" placeholder="z.B. m123 (4–5 Zeichen)" /></div>
-              <div><label class="lbl">Nachname</label><input v-model="chUserCreate.name" class="ctrl text-xs" /></div>
-              <div><label class="lbl">Vorname</label><input v-model="chUserCreate.vorname" class="ctrl text-xs" /></div>
-            </div>
-            <p class="text-gray-400 text-xs">Initial-Passwort = Kürzel (muss beim ersten Login geändert werden).</p>
-            <div v-if="chUserCreateError" class="p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">{{ chUserCreateError }}</div>
-            <div class="flex gap-2">
-              <button @click="chDoCreateUser" :disabled="!chUserCreate.kuerzel.trim()" class="btn-sm">Anlegen</button>
-              <button @click="chUserCreate = null" class="btn-sec text-xs">Abbrechen</button>
+            <div class="flex items-center gap-2">
+              <button @click="exportExcel" class="btn-sec text-xs flex items-center gap-1">📥 Excel</button>
             </div>
           </div>
           <!-- Eintritt form -->
@@ -684,8 +691,9 @@ const ChapterManager = {
                 </thead>
                 <tbody>
                   <tr v-if="!chMbRows(ch.id).length"><td colspan="8" class="px-3 py-8 text-center text-gray-300">Keine Mitglieder gefunden.</td></tr>
-                  <tr v-for="row in chMbRows(ch.id)" :key="row.kuerzel + '|' + row.sparte"
-                    :class="row.status === 'passiv' ? 'row-passiv' : ''" class="border-t border-gray-50 hover:bg-gray-50 transition-colors">
+                  <template v-for="row in chMbRows(ch.id)" :key="row.kuerzel + '|' + row.sparte">
+                  <tr :class="row.status === 'passiv' ? 'row-passiv' : (chAustrittPending[ch.id + '|' + row.kuerzel + '|' + row.sparte] !== undefined ? 'bg-orange-50' : '')"
+                    class="border-t border-gray-50 hover:bg-gray-50 transition-colors">
                     <td class="px-3 py-2 font-mono text-gray-500">{{ row.kuerzel }}</td>
                     <td class="px-3 py-2 text-gray-700">{{ row.vorname }}</td>
                     <td class="px-3 py-2 text-gray-800 font-medium">{{ row.name }}</td>
@@ -704,17 +712,39 @@ const ChapterManager = {
                     <td class="px-3 py-2"><status-badge :active="row.status === 'aktiv'" :label="row.status || 'aktiv'" /></td>
                     <td class="px-3 py-2 text-right whitespace-nowrap">
                       <template v-if="row.status !== 'passiv'">
-                        <div v-if="chAustrittPending[ch.id + '|' + row.kuerzel + '|' + row.sparte] !== undefined" class="flex items-center gap-1 justify-end">
-                          <input type="date" v-model="chAustrittPending[ch.id + '|' + row.kuerzel + '|' + row.sparte]" class="ctrl text-xs py-0.5 px-1.5 w-32" />
-                          <button @click="chConfirmAustritt(ch.id, row)" class="px-2 py-0.5 bg-orange-500 text-white text-xs rounded-md hover:bg-orange-600 whitespace-nowrap">✓ OK</button>
-                          <button @click="delete chAustrittPending[ch.id + '|' + row.kuerzel + '|' + row.sparte]" class="text-gray-400 hover:text-gray-600 text-xs">✕</button>
-                        </div>
-                        <button v-else @click="chAustrittPending[ch.id + '|' + row.kuerzel + '|' + row.sparte] = new Date().toISOString().slice(0,10)"
-                          class="text-orange-500 hover:text-orange-700 text-xs font-medium">Austritt</button>
+                        <button v-if="chAustrittPending[ch.id + '|' + row.kuerzel + '|' + row.sparte] === undefined"
+                          @click="chAustrittPending[ch.id + '|' + row.kuerzel + '|' + row.sparte] = new Date().toISOString().slice(0,10); chAustrittGrund[ch.id + '|' + row.kuerzel + '|' + row.sparte] = ''"
+                          class="text-orange-500 hover:text-orange-700 text-xs font-medium">Austritt …</button>
+                        <button v-else
+                          @click="delete chAustrittPending[ch.id + '|' + row.kuerzel + '|' + row.sparte]; delete chAustrittGrund[ch.id + '|' + row.kuerzel + '|' + row.sparte]"
+                          class="text-gray-400 hover:text-gray-600 text-xs">✕ Abbrechen</button>
                       </template>
-                      <button v-else @click="chDoReactivate(ch.id, row)" class="text-green-600 hover:text-green-800 text-xs font-medium">Wieder aufnehmen</button>
                     </td>
                   </tr>
+                  <!-- Austritt detail row -->
+                  <tr v-if="chAustrittPending[ch.id + '|' + row.kuerzel + '|' + row.sparte] !== undefined"
+                    :key="row.kuerzel + '|' + row.sparte + '|austritt'" class="bg-orange-50 border-t border-orange-100">
+                    <td colspan="8" class="px-4 pb-3">
+                      <div class="flex flex-wrap items-end gap-3 pt-1">
+                        <div>
+                          <label class="text-[10px] text-orange-700 uppercase tracking-wide font-semibold block mb-1">Austrittsdatum</label>
+                          <input type="date" v-model="chAustrittPending[ch.id + '|' + row.kuerzel + '|' + row.sparte]" class="ctrl text-xs py-1 px-2 w-36" />
+                        </div>
+                        <div>
+                          <label class="text-[10px] text-orange-700 uppercase tracking-wide font-semibold block mb-1">Austrittsgrund</label>
+                          <select v-model="chAustrittGrund[ch.id + '|' + row.kuerzel + '|' + row.sparte]" class="ctrl text-xs py-1 px-2 w-40">
+                            <option value="">– kein Grund –</option>
+                            <option value="Rente">Rente</option>
+                            <option value="Ausschluss">Ausschluss</option>
+                            <option value="sonstiges">sonstiges</option>
+                          </select>
+                        </div>
+                        <button @click="chConfirmAustritt(ch.id, row)"
+                          class="px-3 py-1.5 bg-orange-500 text-white text-xs rounded-lg hover:bg-orange-600 font-semibold whitespace-nowrap">✓ Austritt bestätigen</button>
+                      </div>
+                    </td>
+                  </tr>
+                  </template>
                 </tbody>
               </table>
             </div>

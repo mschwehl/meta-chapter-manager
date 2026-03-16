@@ -95,6 +95,10 @@
 
         async function submit() {
           error.value = '';
+          form.kuerzel = form.kuerzel.trim().toLowerCase();
+          form.name = form.name.trim();
+          form.vorname = form.vorname.trim();
+          form.bemerkung = form.bemerkung.trim();
           if (!/^[a-z0-9]+$/.test(form.kuerzel)) {
             error.value = 'Kürzel darf nur Kleinbuchstaben und Ziffern enthalten.';
             return;

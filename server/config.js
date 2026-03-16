@@ -1,12 +1,20 @@
 const path = require('path');
 
-// Fail fast: JWT_SECRET must be set explicitly — no insecure default.
+// In development, allow a fallback dev secret rather than crashing.
+// In production (NODE_ENV=production or JWT_SECRET explicitly set) the secret must be provided.
 if (!process.env.JWT_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    process.stderr.write(JSON.stringify({
+      ts: new Date().toISOString(), level: 'FATAL', event: 'startup.config',
+      msg: 'JWT_SECRET environment variable is not set. Set a strong secret before starting.',
+    }) + '\n');
+    process.exit(1);
+  }
+  process.env.JWT_SECRET = 'dev-only-insecure-secret-do-not-use-in-production';
   process.stderr.write(JSON.stringify({
-    ts: new Date().toISOString(), level: 'FATAL', event: 'startup.config',
-    msg: 'JWT_SECRET environment variable is not set. Set a strong secret before starting.',
+    ts: new Date().toISOString(), level: 'WARN', event: 'startup.config',
+    msg: 'JWT_SECRET not set — using insecure dev default. Set NODE_ENV=production to enforce.',
   }) + '\n');
-  process.exit(1);
 }
 
 // All configurable via environment variables

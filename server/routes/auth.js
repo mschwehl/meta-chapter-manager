@@ -28,7 +28,8 @@ function validatePasswordStrength(pw) {
 }
 
 router.post('/login', loginLimiter, async (req, res) => {
-  const { kuerzel, password } = req.body;
+  const kuerzel = (req.body.kuerzel || '').trim().toLowerCase();
+  const { password } = req.body;
   if (!kuerzel || !password) {
     return res.status(400).json({ error: 'Kürzel und Passwort erforderlich' });
   }

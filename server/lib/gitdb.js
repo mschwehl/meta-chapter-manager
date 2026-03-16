@@ -210,6 +210,10 @@ let _syncInterval = null;
 function startAutoSync(intervalMs = 5 * 60 * 1000) {
   if (_syncInterval) clearInterval(_syncInterval);
   _syncInterval = setInterval(async () => {
+    // Prune expired token revocations (older than 8h JWT lifetime)
+    const cutoff = Date.now() - 8 * 60 * 60 * 1000;
+    for (const [k, ts] of _revokedAt) { if (ts < cutoff) _revokedAt.delete(k); }
+
     const result = await gitCommitAndPush();
     if (result.committed) {
       logger.info('git.autosync', { pushed: result.pushed });
@@ -286,7 +290,11 @@ function getRevokedAt(kuerzel) {
 }
 
 async function readOrganisation() {
-  return readJson(path.join(DB_PATH, 'organisation.json'));
+  return readJson(path.join(DB_PATH, 'organisation.json'))
+    .catch(e => {
+      if (e.code === 'ENOENT') return { name: '', chapters: [], orgAdmins: [] };
+      throw e;
+    });
 }
 
 /**
@@ -347,7 +355,7 @@ async function writeChapter(chapter, authorKuerzel) {
   await fs.mkdir(path.join(chapterDir, 'events'), { recursive: true });
 
   // Write base chapter file
-  await writeJson(path.join(chapterDir, 'chapter.json'), { id, name, admins: admins || [], gegruendet: chapter.gegruendet || null },
+  await writeJson(path.join(chapterDir, 'chapter.json'), { id, name, admins: admins || [], gegruendet: chapter.gegruendet || null, aufgeloest: chapter.aufgeloest || null },
     `Chapter: ${id}`, authorKuerzel);
 
   // Write / update each sparte file – sparten is now [{ id, name, admins, datumAngelegt, datumStillgelegt }]
@@ -410,11 +418,62 @@ async function deleteChapterEvent(chapterId, eventId, authorKuerzel) {
   await deleteJson(path.join(DB_PATH, 'chapter', chapterId, 'events', `${eventId}.json`));
 }
 
+async function deleteChapterDir(chapterId, authorKuerzel) {
+  const dir = path.join(DB_PATH, 'chapter', chapterId);
+  await fs.rm(dir, { recursive: true, force: true });
+  await gitSave(`Chapter ${chapterId} gelöscht`, authorKuerzel);
+}
+
+/**
+ * Ensure a bootstrap admin user exists.
+ * Runs after initDatabase(). If no 'admin' credential is present, creates:
+ *   - user/admin.json  (name: Administrator)
+ *   - credentials.json entry  (admin / admin, mustChange: true)
+ *   - organisation.json  (admin added to orgAdmins)
+ * Idempotent – skips silently if admin already exists.
+ */
+async function ensureBootstrapAdmin() {
+  const bcrypt = require('bcryptjs');
+  const crypto = require('crypto');
+  const creds = await readCredentials();
+  if (creds.admin) return; // already bootstrapped
+
+  const orgPath = path.join(DB_PATH, 'organisation.json');
+  let org;
+  try { org = await readJson(orgPath); } catch {
+    org = { id: 'org', name: '', chapters: [], orgAdmins: [], zeitstelle: [] };
+  }
+  if (!org.orgAdmins) org.orgAdmins = [];
+  if (!org.orgAdmins.includes('admin')) org.orgAdmins.push('admin');
+
+  const bootstrapPassword = crypto.randomBytes(16).toString('hex');
+  const adminHash = await bcrypt.hash(bootstrapPassword, 12);
+  await fs.mkdir(path.join(DB_PATH, 'user'),     { recursive: true });
+  await fs.mkdir(path.join(DB_PATH, 'requests'), { recursive: true });
+
+  await fs.writeFile(orgPath,
+    JSON.stringify(org, null, 2), 'utf-8');
+  await fs.writeFile(path.join(DB_PATH, 'user', 'admin.json'),
+    JSON.stringify({ kuerzel: 'admin', name: 'Administrator', vorname: 'System', chapters: [] }, null, 2), 'utf-8');
+  await fs.writeFile(path.join(DB_PATH, 'credentials.json'),
+    JSON.stringify({ ...creds, admin: { hash: adminHash, mustChange: true } }, null, 2), 'utf-8');
+  invalidateCredentialsCache();
+
+  const git = getGit();
+  await git.add('.');
+  const status = await git.status();
+  if (status.staged.length > 0) {
+    await git.commit('Bootstrap: admin user created (change password on first login)');
+  }
+  logger.warn('startup.bootstrap', { msg: `Bootstrap admin created — Kuerzel: admin / Passwort: ${bootstrapPassword} — Passwort sofort ändern!` });
+}
+
 async function readUser(kuerzel) {
   return readJson(path.join(DB_PATH, 'user', `${kuerzel}.json`));
 }
 
 async function gitLog(limit = 50) {
+  limit = Math.max(1, Math.min(Number(limit) || 50, 500));
   const git = getGit();
   try {
     const log = await git.log([
@@ -467,6 +526,7 @@ module.exports = {
   deleteCredential,
   invalidateUserToken,
   getRevokedAt,
+  ensureBootstrapAdmin,
   readOrganisation,
   readChapters,
   readChapter,
@@ -476,6 +536,7 @@ module.exports = {
   readChapterEvent,
   writeChapterEvent,
   deleteChapterEvent,
+  deleteChapterDir,
   readUser,
   readAllUsers,
   writeJson,

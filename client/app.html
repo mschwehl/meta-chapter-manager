@@ -15,6 +15,7 @@
   </style>
   <script src="/branding.js"></script>
   <script src="/branding.custom.js" onerror="void 0"></script>
+  <script src="/store.js"></script>
   <script src="/i18n.js"></script>
   <style>
     [v-cloak] { display: none; }
@@ -41,9 +42,9 @@
       <!-- Left cluster -->
       <div class="flex items-center gap-1.5 sm:gap-2.5 min-w-0 flex-1">
         <!-- Brand -->
-        <button @click="mod = 'ctx'; ctx = null; window.history.pushState(null, '', '/app')"
+        <button @click="ctx ? (mod = 'dashboard') : (mod = 'ctx', ctx = null, window.history.pushState(null, '', '/app'))"
           class="flex items-center gap-2 shrink-0 group focus:outline-none transition-all"
-          title="Zur Rollenauswahl">
+          title="Dashboard">
           <div class="w-7 h-7 rounded-[8px] bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white text-[10px] font-black leading-none select-none shadow-sm shadow-blue-500/20 group-hover:shadow-blue-500/40 group-hover:scale-105 transition-all">
             {{ (branding.logoText || 'APP').slice(0,3) }}
           </div>
@@ -105,6 +106,8 @@
         <span v-if="demoMode" class="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30" title="Demo-Modus">
           DEMO
         </span>
+        <!-- Version -->
+        <span v-if="appVersion" class="hidden sm:inline text-[10px] text-gray-600 font-mono" title="Version">v{{ appVersion }}</span>
 
         <!-- Separator -->
         <div class="w-px h-5 bg-white/15 mx-0.5 hidden sm:block"></div>
@@ -172,14 +175,46 @@
             </button>
           </div>
         </div>
+
+        <!-- Chapter directory (only for plain members — users with no admin roles) -->
+        <div v-if="chapterDirectory.length && !isOrgaAdmin && !isZeitstelle && !hasAnyChapterRole" class="w-full max-w-2xl mt-10">
+          <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 text-center">Verfügbare Chapter</h2>
+          <div class="space-y-3">
+            <div v-for="ch in chapterDirectory" :key="ch.id"
+              class="bg-white rounded-xl border border-gray-200/80 p-5">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <div class="font-semibold text-gray-800 text-sm">{{ ch.name }}</div>
+                  <div v-if="ch.gegruendet" class="text-[11px] text-gray-400 mt-0.5">Gegründet {{ ch.gegruendet }}</div>
+                </div>
+                <div v-if="ch.admins.length" class="flex flex-wrap gap-1 justify-end">
+                  <span v-for="a in ch.admins" :key="a.kuerzel"
+                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-50 text-purple-600">
+                    👤 {{ a.displayName }}
+                  </span>
+                </div>
+              </div>
+              <div v-if="ch.sparten.length" class="flex flex-wrap gap-1.5 mt-3">
+                <span v-for="sp in ch.sparten" :key="sp.id"
+                  class="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-gray-100 text-gray-600">
+                  {{ sp.name }}
+                </span>
+              </div>
+              <div v-else class="text-gray-300 text-[11px] mt-2">Noch keine Sparten angelegt</div>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <!-- ════════ MODULE COMPONENTS ════════ -->
-      <dashboard-view   v-if="mod === 'dashboard'"  @navigate="mod = $event"></dashboard-view>
+      <dashboard-view   v-if="mod === 'dashboard' && ctx && ctx.type !== 'user'"  @navigate="mod = $event"></dashboard-view>
+      <user-dashboard   v-if="mod === 'dashboard' && ctx && ctx.type === 'user'"  @navigate="mod = $event"></user-dashboard>
       <events-list      v-if="mod === 'events'"></events-list>
       <pruefe-wizard    v-if="mod === 'pruefe'"      :init-chapter-id="ctx?.chapterId || ''" :init-sparte-id="ctx?.sparteId || ''" @done="mod = 'ctx'"></pruefe-wizard>
       <member-manager   v-if="mod === 'members'"></member-manager>
       <chapter-manager  v-if="mod === 'chapters'"    @navigate="mod = $event"></chapter-manager>
+      <user-admin       v-if="mod === 'useradmin'"></user-admin>
       <orga-admin       v-if="mod === 'orga'"></orga-admin>
       <docs-viewer      v-if="mod === 'dokumente'"></docs-viewer>
       <user-settings    v-if="mod === 'settings'" @password-changed="mod = 'ctx'"></user-settings>
@@ -286,7 +321,9 @@
 <script src="/components/member-manager.js"></script>
 <script src="/components/chapter-manager.js"></script>
 <script src="/components/orga-admin.js"></script>
+<script src="/components/user-admin.js"></script>
 <script src="/components/docs-viewer.js"></script>
+<script src="/components/user-dashboard.js"></script>
 <script src="/components/user-settings.js"></script>
 <script src="/components/system-info.js"></script>
 
@@ -296,17 +333,21 @@ const { createApp, ref, reactive, computed, watch, onMounted, provide, nextTick 
 const app = createApp({
   setup() {
     // ── Auth guard ──
-    const token = localStorage.getItem('token');
+    const token = MCM_STORE.get('token');
     if (!token) { window.location.href = '/login.html?redirect=' + encodeURIComponent(window.location.pathname + window.location.search + window.location.hash); return {}; }
 
-    const user = ref(JSON.parse(localStorage.getItem('user') || '{}'));
-    const mustChange = new URLSearchParams(window.location.search).get('mustChange') === '1' || localStorage.getItem('mustChange') === '1';
+    const user = ref(JSON.parse(MCM_STORE.get('user') || '{}'));
+    const mustChange = new URLSearchParams(window.location.search).get('mustChange') === '1' || MCM_STORE.get('mustChange') === '1';
     const i18n = MCM_I18N;
     const mod = ref(mustChange ? 'settings' : 'ctx');
     const ctx = ref(null);
     const userMenu = ref(false);
     const demoMode = ref(false);
-    fetch('/api/status').then(r => r.json()).then(d => { demoMode.value = !!d.demoMode; }).catch(() => {});
+    const appVersion = ref('');
+    fetch('/api/status').then(r => r.json()).then(d => {
+      demoMode.value = !!d.demoMode;
+      if (d.version) appVersion.value = d.version;
+    }).catch(() => {});
 
     // ── Path-based routing ──
     function ctxPath(opt) {
@@ -315,7 +356,7 @@ const app = createApp({
       if (opt.type === 'zeitstelle')    return '/app/zeitstelle';
       if (opt.type === 'chapteradmin')  return '/app/chapteradmin/' + opt.chapterId;
       if (opt.type === 'spartenadmin')  return '/app/spartenadmin/' + opt.chapterId + '/' + opt.sparteId;
-      return '/app/member';
+      return '/app/user';
     }
 
     // ── Role helpers ──
@@ -356,11 +397,13 @@ const app = createApp({
     const ctxModules = computed(() => {
       if (!ctx.value) return [];
       const type = ctx.value.type;
-      if (type === 'orgadmin')     return [{ id:'chapters', icon:'🏢', label:'Chapter' }];
-      if (type === 'chapteradmin') return [{ id:'chapters', icon:'🏢', label:'Mein Chapter' }];
-      if (type === 'spartenadmin') return [{ id:'pruefe', icon:'⏱', label:'Zeitkorrektur prüfen' }];
-      if (type === 'zeitstelle')   return [{ id:'dokumente', icon:'📂', label:'Dokumente' }, { id:'events', icon:'📅', label:'Veranstaltungen' }];
-      return [];
+      const dash = { id:'dashboard', icon:'📊', label:'Dashboard' };
+      if (type === 'orgadmin')     return [dash, { id:'chapters', icon:'🏢', label:'Chapter' }, { id:'useradmin', icon:'👥', label:'Benutzer' }];
+      if (type === 'chapteradmin') return [dash, { id:'chapters', icon:'🏢', label:'Mein Chapter' }];
+      if (type === 'spartenadmin') return [dash, { id:'pruefe', icon:'⏱', label:'Zeitkorrektur prüfen' }];
+      if (type === 'zeitstelle')   return [dash, { id:'dokumente', icon:'📂', label:'Dokumente' }, { id:'events', icon:'📅', label:'Veranstaltungen' }];
+      if (type === 'user')         return [dash, { id:'settings', icon:'⚙️', label:'Einstellungen' }];
+      return [dash];
     });
 
     // Guard: if current mod not allowed in ctx, jump to first allowed
@@ -405,11 +448,12 @@ const app = createApp({
       if (ch.austrittsdatum && ch.austrittsdatum < today) return false;
       return true;
     }
-    function logout() { localStorage.clear(); window.location.href = '/login.html'; }
+    function logout() { MCM_STORE.logout(); window.location.href = '/login.html'; }
 
     // ── Shared data (needed by multiple components) ──
     const prChapters = ref([]);
     const org = ref(null);
+    const chapterDirectory = ref([]);
     const userNameCache = reactive({});
 
     async function loadChapters() {
@@ -417,6 +461,9 @@ const app = createApp({
     }
     async function loadOrg() {
       try { const r = await api('/api/orga'); org.value = await r.json(); } catch {}
+    }
+    async function loadDirectory() {
+      try { const r = await api('/api/chapters/directory'); chapterDirectory.value = await r.json(); } catch {}
     }
 
     // ── User-picker helpers (shared via provide) ──
@@ -469,6 +516,7 @@ const app = createApp({
     provide('isZeitstelle', isZeitstelle);
     provide('isSuperadminAnywhere', isSuperadminAnywhere);
     provide('hasAnyChapterRole', hasAnyChapterRole);
+    provide('chapterDirectory', chapterDirectory);
     provide('userNameCache', userNameCache);
     provide('uPickSearch', uPickSearch);
     provide('uPickAdd', uPickAdd);
@@ -499,8 +547,8 @@ const app = createApp({
             opts.push({ type: 'spartenadmin', chapterId: cid, sparteId: sp, label: 'Spartenadmin', detail: `${i18n.sparte(sp)} · ${i18n.chapter(cid)}`, icon: '🏓', desc: 'Veranstaltungen prüfen und einreichen', color: 'blue' });
         }
       }
-      if (opts.length === 0)
-        opts.push({ type: 'member', label: 'Mitglied', detail: null, icon: '👤', desc: 'Konto und Einstellungen verwalten', color: 'gray' });
+      // User tile — always shown for every user
+      opts.push({ type: 'user', label: 'Mein Bereich', detail: null, icon: '👤', desc: 'Persönliches Dashboard, Mitgliedschaften und Einstellungen', color: 'gray' });
       return opts;
     });
 
@@ -510,7 +558,7 @@ const app = createApp({
       else if (opt.type === 'chapteradmin') mod.value = 'chapters';
       else if (opt.type === 'spartenadmin') mod.value = 'pruefe';
       else if (opt.type === 'zeitstelle')   mod.value = 'dokumente';
-      else                                  mod.value = 'settings';
+      else                                  mod.value = 'dashboard';
       if (!skipPush) window.history.pushState(null, '', ctxPath(opt));
     }
 
@@ -524,7 +572,7 @@ const app = createApp({
       else if (type === 'zeitstelle')   match = opts.find(o => o.type === 'zeitstelle');
       else if (type === 'chapteradmin' && segs[1]) match = opts.find(o => o.type === 'chapteradmin' && o.chapterId === segs[1]);
       else if (type === 'spartenadmin' && segs[1] && segs[2]) match = opts.find(o => o.type === 'spartenadmin' && o.chapterId === segs[1] && o.sparteId === segs[2]);
-      else if (type === 'member')       match = opts.find(o => o.type === 'member');
+      else if (type === 'user')         match = opts.find(o => o.type === 'user');
       if (match) { selectCtx(match, true); return true; }
       return false;
     }
@@ -542,7 +590,7 @@ const app = createApp({
       }
     });
 
-    onMounted(() => { loadChapters(); loadOrg(); });
+    onMounted(() => { loadChapters(); loadOrg(); loadDirectory(); });
 
     return {
       user, i18n, mod, visibleModules, currentModule,
@@ -550,11 +598,14 @@ const app = createApp({
       logout, statusCls, userMenu,
       ctx, ctxOptions, selectCtx, ctxPath, ctxModules,
       syncing, syncStatus, triggerSync,
-      demoMode,
+      demoMode, chapterDirectory,
       branding: window.APP_BRANDING || {},
     };
   }
 });
+
+// Make ROLE_LEVEL available in Vue templates (window globals are not accessible there)
+app.config.globalProperties.ROLE_LEVEL = window.ROLE_LEVEL;
 
 // Register all components
 app.component('user-picker', UserPicker);
@@ -565,7 +616,9 @@ app.component('pruefe-wizard', PruefeWizard);
 app.component('member-manager', MemberManager);
 app.component('chapter-manager', ChapterManager);
 app.component('orga-admin', OrgaAdmin);
+app.component('user-admin', UserAdmin);
 app.component('docs-viewer', DocsViewer);
+app.component('user-dashboard', UserDashboard);
 app.component('user-settings', UserSettings);
 app.component('system-info', SystemInfo);
 app.mount('#app');

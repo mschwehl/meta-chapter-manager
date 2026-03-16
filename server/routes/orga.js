@@ -39,7 +39,7 @@ router.put('/', requireOrgaAdmin, async (req, res) => {
 
 // GET /api/orga/gitlog – Git-Protokoll (nur Orga-Admins)
 router.get('/gitlog', requireOrgaAdmin, async (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit || '100', 10), 500);
+  const limit = Math.max(1, Math.min(parseInt(req.query.limit || '100', 10) || 100, 500));
   const entries = await gitLog(limit);
   res.json(entries);
 });

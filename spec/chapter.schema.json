@@ -27,6 +27,13 @@
         { "type": "null" }
       ]
     },
+    "aufgeloest": {
+      "description": "Auflösungsdatum des Chapters im Format YYYY-MM-DD oder null — null bedeutet aktiv",
+      "oneOf": [
+        { "type": "string", "format": "date" },
+        { "type": "null" }
+      ]
+    },
     "sparten": {
       "type": "array",
       "description": "Sparten des Chapters – wird beim Lesen aus den einzelnen sparte/{id}.json Dateien zusammengeführt (API-Response-Shape, nicht gespeichert in chapter.json selbst)",

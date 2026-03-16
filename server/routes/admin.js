@@ -1,5 +1,6 @@
 ﻿const express = require('express');
 const os = require('os');
+const ExcelJS = require('exceljs');
 const {
   readAllUsers, readUser, writeJson, deleteJson, readCredentials, writeCredential, deleteCredential, DB_PATH, readOrganisation, readChapters, gitLog
 } = require('../lib/gitdb');
@@ -8,6 +9,7 @@ const config = require('../config');
 const path = require('path');
 const logger = require('../lib/logger');
 const { ROLE_LEVEL } = require('../../client/i18n.js');
+const { validateIds } = require('../lib/validate');
 
 const router = express.Router();
 
@@ -39,7 +41,7 @@ router.get('/users', async (req, res) => {
 });
 
 // GET /api/admin/users/:kuerzel
-router.get('/users/:kuerzel', async (req, res) => {
+router.get('/users/:kuerzel', validateIds({ param: 'kuerzel' }), async (req, res) => {
   try {
     const user = await readUser(req.params.kuerzel);
     res.json(user);
@@ -48,11 +50,16 @@ router.get('/users/:kuerzel', async (req, res) => {
   }
 });
 
-// POST /api/admin/users â€“ create user (kÃ¼rzel, name, vorname only â€” no chapters)
-router.post('/users', requireChapterAdmin('chapterId'), async (req, res) => {
-  const { kuerzel, name, vorname } = req.body;
-  if (!kuerzel) return res.status(400).json({ error: 'KÃ¼rzel erforderlich' });
-  if (!/^[a-z][a-z0-9]{3,4}$/.test(kuerzel)) return res.status(400).json({ error: 'KÃ¼rzel muss 4â€“5 Zeichen haben (Buchstaben aâ€“z und Ziffern, beginnt mit Buchstabe)' });
+// POST /api/admin/users — create user (nur Orga-Admin)
+router.post('/users', requireOrgaAdmin, validateIds({ body: 'kuerzel' }), async (req, res) => {
+  const kuerzel = (req.body.kuerzel || '').trim().toLowerCase();
+  const name = (req.body.name || '').trim();
+  const vorname = (req.body.vorname || '').trim();
+  const kontakte = Array.isArray(req.body.kontakte)
+    ? req.body.kontakte.map(k => ({ typ: String(k.typ || '').trim(), wert: String(k.wert || '').trim() })).filter(k => k.typ && k.wert)
+    : [];
+  if (!kuerzel) return res.status(400).json({ error: 'Kürzel erforderlich' });
+  if (!/^[a-z][a-z0-9]{3,4}$/.test(kuerzel)) return res.status(400).json({ error: 'Kürzel muss 4–5 Zeichen haben (Buchstaben a–z und Ziffern, beginnt mit Buchstabe)' });
 
   // Duplikat prÃ¼fen
   try {
@@ -60,7 +67,7 @@ router.post('/users', requireChapterAdmin('chapterId'), async (req, res) => {
     return res.status(409).json({ error: `KÃ¼rzel ${kuerzel} existiert bereits` });
   } catch { /* gut, existiert nicht */ }
 
-  const userData = { kuerzel, name: name || '', vorname: vorname || '', chapters: [] };
+  const userData = { kuerzel, name: name || '', vorname: vorname || '', kontakte, chapters: [] };
   const filePath = path.join(DB_PATH, 'user', `${kuerzel}.json`);
   await writeJson(filePath, userData, `User angelegt: ${kuerzel}`, req.user.kuerzel);
 
@@ -70,7 +77,7 @@ router.post('/users', requireChapterAdmin('chapterId'), async (req, res) => {
 });
 
 // PUT /api/admin/users/:kuerzel â€“ edit basic user data (name, vorname only)
-router.put('/users/:kuerzel', async (req, res) => {
+router.put('/users/:kuerzel', validateIds({ param: 'kuerzel' }), async (req, res) => {
   const { kuerzel } = req.params;
   const { roles, orgaAdmin } = req.user;
 
@@ -86,8 +93,13 @@ router.put('/users/:kuerzel', async (req, res) => {
   }
 
   const updated = { ...existing };
-  if (req.body.name !== undefined) updated.name = req.body.name;
-  if (req.body.vorname !== undefined) updated.vorname = req.body.vorname;
+  if (req.body.name !== undefined) updated.name = String(req.body.name).trim();
+  if (req.body.vorname !== undefined) updated.vorname = String(req.body.vorname).trim();
+  if (req.body.kontakte !== undefined) {
+    updated.kontakte = Array.isArray(req.body.kontakte)
+      ? req.body.kontakte.map(k => ({ typ: String(k.typ || '').trim(), wert: String(k.wert || '').trim() })).filter(k => k.typ && k.wert)
+      : [];
+  }
 
   const filePath = path.join(DB_PATH, 'user', `${kuerzel}.json`);
   await writeJson(filePath, updated, `User bearbeitet: ${kuerzel}`, req.user.kuerzel);
@@ -95,7 +107,7 @@ router.put('/users/:kuerzel', async (req, res) => {
 });
 
 // POST /api/admin/users/:kuerzel/chapter â€“ add chapter membership
-router.post('/users/:kuerzel/chapter', async (req, res) => {
+router.post('/users/:kuerzel/chapter', validateIds({ param: 'kuerzel' }, { body: 'chapterId' }, { body: 'sparte' }), async (req, res) => {
   const { kuerzel } = req.params;
   const { roles, orgaAdmin } = req.user;
   const { chapterId, sparte, eintrittsdatum, austrittsdatum, status } = req.body;
@@ -129,7 +141,7 @@ router.post('/users/:kuerzel/chapter', async (req, res) => {
 });
 
 // PATCH /api/admin/users/:kuerzel/chapter â€“ update membership (status, austrittsdatum, eintrittsdatum)
-router.patch('/users/:kuerzel/chapter', async (req, res) => {
+router.patch('/users/:kuerzel/chapter', validateIds({ param: 'kuerzel' }, { body: 'chapterId' }, { body: 'sparte' }), async (req, res) => {
   const { kuerzel } = req.params;
   const { roles, orgaAdmin } = req.user;
   const { chapterId, sparte, ...updates } = req.body;
@@ -147,14 +159,17 @@ router.patch('/users/:kuerzel/chapter', async (req, res) => {
   const membership = (existing.chapters || []).find(c => c.chapterId === chapterId && c.sparte === sparte);
   if (!membership) return res.status(404).json({ error: 'Mitgliedschaft nicht gefunden' });
 
-  Object.assign(membership, updates);
+  const allowedFields = ['eintrittsdatum', 'austrittsdatum', 'status', 'austrittsgrund'];
+  for (const field of allowedFields) {
+    if (req.body[field] !== undefined) membership[field] = req.body[field];
+  }
   const filePath = path.join(DB_PATH, 'user', `${kuerzel}.json`);
   await writeJson(filePath, existing, `Chapter ${chapterId}/${sparte} aktualisiert: ${kuerzel}`, req.user.kuerzel);
   res.json(existing);
 });
 
 // DELETE /api/admin/users/:kuerzel/chapter â€“ remove chapter membership
-router.delete('/users/:kuerzel/chapter', async (req, res) => {
+router.delete('/users/:kuerzel/chapter', validateIds({ param: 'kuerzel' }, { body: 'chapterId' }, { body: 'sparte' }), async (req, res) => {
   const { kuerzel } = req.params;
   const { roles, orgaAdmin } = req.user;
   const { chapterId, sparte } = req.body;
@@ -177,10 +192,9 @@ router.delete('/users/:kuerzel/chapter', async (req, res) => {
 });
 
 // DELETE /api/admin/users/:kuerzel â€“ delete user permanently
-router.delete('/users/:kuerzel', async (req, res) => {
-  if (!req.user.orgaAdmin) return res.status(403).json({ error: 'Nur Orga-Admins dÃ¼rfen Benutzer lÃ¶schen' });
+router.delete('/users/:kuerzel', validateIds({ param: 'kuerzel' }), async (req, res) => {
+  if (!req.user.orgaAdmin) return res.status(403).json({ error: 'Nur Orga-Admins dürfen Benutzer löschen' });
   const kuerzel = req.params.kuerzel;
-  if (!/^[a-z0-9_-]+$/i.test(kuerzel)) return res.status(400).json({ error: 'UngÃ¼ltiges KÃ¼rzel' });
   try {
     await readUser(kuerzel);
     const filePath = path.join(DB_PATH, 'user', `${kuerzel}.json`);
@@ -199,7 +213,7 @@ router.delete('/users/:kuerzel', async (req, res) => {
 });
 
 // POST /api/admin/users/:kuerzel/reset-password â€“ Passwort zurÃ¼cksetzen
-router.post('/users/:kuerzel/reset-password', async (req, res) => {
+router.post('/users/:kuerzel/reset-password', validateIds({ param: 'kuerzel' }), async (req, res) => {
   const { kuerzel } = req.params;
   const { roles, orgaAdmin } = req.user;
 
@@ -257,6 +271,83 @@ router.get('/sysinfo', requireOrgaAdmin, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// GET /api/admin/export/users.xlsx — Excel-Export aller Mitglieder
+router.get('/export/users.xlsx', async (req, res) => {
+  const { roles, orgaAdmin, zeitstelle } = req.user;
+  const allowedChapters = (orgaAdmin || zeitstelle)
+    ? null
+    : Object.entries(roles || {})
+        .filter(([, r]) => r?.level === ROLE_LEVEL.CHAPTER || r?.level === ROLE_LEVEL.SPARTE)
+        .map(([id]) => id);
+  if (!orgaAdmin && !zeitstelle && (!allowedChapters || !allowedChapters.length)) {
+    return res.status(403).json({ error: 'Kein Zugriff' });
+  }
+
+  const [users, chapters] = await Promise.all([readAllUsers(), readChapters()]);
+  const chapterNames = {};
+  const sparteNames = {};
+  for (const ch of chapters) {
+    chapterNames[ch.id] = ch.name || ch.id;
+    for (const sp of (ch.sparten || [])) sparteNames[sp.id] = sp.name || sp.id;
+  }
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'MetaChapterManager';
+  wb.created = new Date();
+  const ws = wb.addWorksheet('Mitglieder');
+
+  ws.columns = [
+    { header: 'Kürzel', key: 'kuerzel', width: 12 },
+    { header: 'Nachname', key: 'name', width: 20 },
+    { header: 'Vorname', key: 'vorname', width: 20 },
+    { header: 'Kontakte', key: 'kontakte', width: 36 },
+    { header: 'Chapter', key: 'chapter', width: 20 },
+    { header: 'Sparte', key: 'sparte', width: 20 },
+    { header: 'Eintrittsdatum', key: 'eintritt', width: 15 },
+    { header: 'Austrittsdatum', key: 'austritt', width: 15 },
+    { header: 'Austrittsgrund', key: 'austrittsgrund', width: 16 },
+    { header: 'Status', key: 'status', width: 12 },
+  ];
+
+  // Header styling
+  ws.getRow(1).font = { bold: true };
+  ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+
+  for (const u of users) {
+    const memberships = (u.chapters || []).filter(c =>
+      !allowedChapters || allowedChapters.includes(c.chapterId)
+    );
+    if (memberships.length === 0) {
+      // User without (visible) memberships — still include once
+      if (!allowedChapters) {
+        const kontakteStr = (u.kontakte || []).map(k => `${k.typ}: ${k.wert}`).join(', ');
+        ws.addRow({ kuerzel: u.kuerzel, name: u.name || '', vorname: u.vorname || '', kontakte: kontakteStr, chapter: '', sparte: '', eintritt: '', austritt: '', austrittsgrund: '', status: '' });
+      }
+    } else {
+      const kontakteStr = (u.kontakte || []).map(k => `${k.typ}: ${k.wert}`).join(', ');
+      for (const m of memberships) {
+        ws.addRow({
+          kuerzel: u.kuerzel,
+          name: u.name || '',
+          vorname: u.vorname || '',
+          kontakte: kontakteStr,
+          chapter: chapterNames[m.chapterId] || m.chapterId,
+          sparte: sparteNames[m.sparte] || m.sparte,
+          eintritt: m.eintrittsdatum || '',
+          austritt: m.austrittsdatum || '',
+          austrittsgrund: m.austrittsgrund || '',
+          status: m.status || '',
+        });
+      }
+    }
+  }
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="mitglieder.xlsx"');
+  await wb.xlsx.write(res);
+  res.end();
 });
 
 module.exports = router;

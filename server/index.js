@@ -14,23 +14,41 @@ const orgaRoutes = require('./routes/orga');
 const docsRoutes = require('./routes/docs');
 const requestsRoutes = require('./routes/requests');
 const { authMiddleware } = require('./middleware/auth');
-const { initDatabase, startAutoSync, gitCommitAndPush, readUser, isDemoMode } = require('./lib/gitdb');
+const { initDatabase, startAutoSync, gitCommitAndPush, readUser, isDemoMode, readOrganisation } = require('./lib/gitdb');
+const { version: APP_VERSION } = require('./package.json');
 const logger = require('./lib/logger');
+
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 
 app.use(cors({ origin: config.corsOrigin || false }));
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
 app.use(logger.requestMiddleware());
+
+// Security headers
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '0');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
 app.use(express.static(path.join(__dirname, '../client')));
 
 // Public routes
 app.use('/api/auth', authRoutes);
-// Public registration: rewrite URL so requestsRouter matches /register
-app.post('/api/auth/register', (req, res, next) => { req.url = '/register'; requestsRoutes(req, res, next); });
+// Public registration: rate-limited, rewrite URL so requestsRouter matches /register
+const registerLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false, message: { error: 'Zu viele Registrierungsversuche. Bitte später erneut versuchen.' } });
+app.post('/api/auth/register', registerLimiter, (req, res, next) => { req.url = '/register'; requestsRoutes(req, res, next); });
 
-// GET /api/status – public, used by SPA to detect demo mode
-app.get('/api/status', (_req, res) => res.json({ demoMode: isDemoMode() }));
+// GET /api/status – public, used by SPA to detect demo mode + branding
+app.get('/api/status', async (_req, res) => {
+  let orgName = null;
+  try { const org = await readOrganisation(); orgName = org.name || null; } catch { /* db may not be ready yet */ }
+  res.json({ demoMode: isDemoMode(), orgName, version: APP_VERSION });
+});
 
 // Protected routes (JWT required)
 app.use('/api/users', authMiddleware, usersRoutes);
@@ -79,8 +97,18 @@ async function start() {
   await fs.mkdir(config.docsDir, { recursive: true });
   logger.info('startup.docs', { dir: config.docsDir });
 
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[DEV MODE] Server starting with NODE_ENV=development');
+    logger.info('startup.dev', { msg: 'Running in development mode', port: config.port });
+  }
+
   // Initialize database (clone/pull or init local)
   await initDatabase();
+
+  // Ensure a bootstrap admin / orgAdmin exists on every start (idempotent).
+  // Covers fresh git repos and empty data directories.
+  const { ensureBootstrapAdmin } = require('./lib/gitdb');
+  await ensureBootstrapAdmin();
 
   // Start periodic git commit + push (every 5 minutes)
   startAutoSync();
@@ -108,3 +136,9 @@ async function shutdown(signal) {
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT',  () => shutdown('SIGINT'));
+
+// Global async error handler — catch unhandled errors in route handlers
+app.use((err, _req, res, _next) => {
+  logger.error('unhandled_error', { err: err.message, stack: err.stack });
+  if (!res.headersSent) res.status(500).json({ error: 'Interner Serverfehler' });
+});

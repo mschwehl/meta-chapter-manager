@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MCM – Dashboard</title>
   <script src="/vendor/tailwindcss-browser.js"></script>
+  <script src="/store.js"></script>
   <script src="/i18n.js"></script>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -191,9 +192,9 @@
 
     createApp({
       setup() {
-        const token = localStorage.getItem('token');
+        const token = MCM_STORE.get('token');
         if (!token) { window.location.href = '/login.html'; }
-        const user = ref(JSON.parse(localStorage.getItem('user') || '{}'));
+        const user = ref(JSON.parse(MCM_STORE.get('user') || '{}'));
         const events = ref([]);
         const loading = ref(true);
         const filter = reactive({ status: 'offen' });
@@ -239,16 +240,19 @@
         }
 
         function logout() {
-          localStorage.clear();
+          MCM_STORE.logout();
           window.location.href = '/login.html';
         }
 
         onMounted(loadEvents);
 
         return { user, events, loading, filter, statusClass, loadEvents, logout, i18n,
-          isOrgaAdmin, isSuperadminAnywhere, hasAnyChapterRole, canSeeMembers, canSeeChapters, canSeeOrga };
+          isOrgaAdmin, isSuperadminAnywhere, hasAnyChapterRole, canSeeMembers, canSeeChapters, canSeeOrga,
+          ROLE_LEVEL: window.ROLE_LEVEL };
       }
-    }).mount('#app');
+    });
+    __dashApp.config.globalProperties.ROLE_LEVEL = window.ROLE_LEVEL;
+    __dashApp.mount('#app');
   </script>
 </body>
 </html>

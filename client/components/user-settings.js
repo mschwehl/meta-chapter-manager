@@ -41,15 +41,15 @@ const UserSettings = {
       <div class="px-6 py-5 space-y-4">
         <div>
           <label class="lbl">Aktuelles Passwort</label>
-          <input v-model="pwForm.current" type="password" autocomplete="current-password" class="ctrl" placeholder="••••••••" />
+          <input v-model="pwForm.current" type="password" autocomplete="current-password" pattern="^\\S.*\\S$|^\\S$" title="Kein Leerzeichen am Anfang oder Ende" class="ctrl" placeholder="••••••••" />
         </div>
         <div>
           <label class="lbl">Neues Passwort</label>
-          <input v-model="pwForm.newPw" type="password" autocomplete="new-password" class="ctrl" placeholder="Mindestens 8 Zeichen" />
+          <input v-model="pwForm.newPw" type="password" autocomplete="new-password" pattern="^\\S.*\\S$|^\\S$" title="Kein Leerzeichen am Anfang oder Ende" class="ctrl" placeholder="Mindestens 8 Zeichen" />
         </div>
         <div>
           <label class="lbl">Bestätigung</label>
-          <input v-model="pwForm.confirm" type="password" autocomplete="new-password" class="ctrl" placeholder="Passwort wiederholen" />
+          <input v-model="pwForm.confirm" type="password" autocomplete="new-password" pattern="^\\S.*\\S$|^\\S$" title="Kein Leerzeichen am Anfang oder Ende" class="ctrl" placeholder="Passwort wiederholen" />
           <p v-if="pwForm.confirm && pwForm.newPw !== pwForm.confirm" class="mt-1 text-[11px] text-red-500">Passwörter stimmen nicht überein</p>
         </div>
         <div v-if="pwError" class="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs">{{ pwError }}</div>

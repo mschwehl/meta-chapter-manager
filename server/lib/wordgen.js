@@ -10,14 +10,22 @@
  */
 const path = require('path');
 const fs   = require('fs');
+const fsp  = require('fs').promises;
 
 const TEMPLATE_DIR  = path.join(__dirname, '../template');
-const BRANDING_TEMPLATE = (() => {
+let _brandingTemplate = null;
+let _brandingResolved = false;
+
+async function getBrandingTemplate() {
+  if (_brandingResolved) return _brandingTemplate;
   try {
-    const hit = fs.readdirSync(TEMPLATE_DIR).find(f => f.toLowerCase().includes('branding') && f.endsWith('.docx'));
-    return hit ? path.join(TEMPLATE_DIR, hit) : null;
-  } catch { return null; }
-})();
+    const files = await fsp.readdir(TEMPLATE_DIR);
+    const hit = files.find(f => f.toLowerCase().includes('branding') && f.endsWith('.docx'));
+    _brandingTemplate = hit ? path.join(TEMPLATE_DIR, hit) : null;
+  } catch { _brandingTemplate = null; }
+  _brandingResolved = true;
+  return _brandingTemplate;
+}
 
 // ─── Generic generator (docx package) ────────────────────────────────────────
 async function generateGeneric(eventDetails, participants) {
@@ -171,7 +179,7 @@ function fillCell(tcXml, newText) {
 
 async function generateFromTemplate(templatePath, eventDetails, participants) {
   const PizZip = require('pizzip');
-  const buf = fs.readFileSync(templatePath);
+  const buf = await fsp.readFile(templatePath);
   const zip = new PizZip(buf);
   let xml = zip.files['word/document.xml'].asText();
 
@@ -208,8 +216,9 @@ async function generateFromTemplate(templatePath, eventDetails, participants) {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 async function generateFreigabedokument(eventDetails, participants) {
-  if (BRANDING_TEMPLATE) {
-    return generateFromTemplate(BRANDING_TEMPLATE, eventDetails, participants);
+  const brandingTemplate = await getBrandingTemplate();
+  if (brandingTemplate) {
+    return generateFromTemplate(brandingTemplate, eventDetails, participants);
   }
   return generateGeneric(eventDetails, participants);
 }

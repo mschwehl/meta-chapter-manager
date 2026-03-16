@@ -23,12 +23,13 @@ COPY client/ ./client/
 # Apply OpenShift group-write pattern:
 # chown to 1001:0 then chmod g=u so any UID with GID=0 (OpenShift's default)
 # has the same filesystem access as the declared owner.
-RUN chown -R 1001:0 /app /home/mcm \
- && chmod -R g=u /app /home/mcm
+RUN mkdir -p /data \
+ && chown -R 1001:0 /app /home/mcm /data \
+ && chmod -R g=u /app /home/mcm /data
 
-# Volumes for persistent data
-# Note: the PVC mounted at /data must be writable by the container's GID (0).
-# On OpenShift, set fsGroup: 0 in the Pod's securityContext, or use an anyuid SCC.
+# /data must be pre-owned before VOLUME freezes the directory.
+# On OpenShift set securityContext.fsGroup=0 on the Pod so a mounted PVC
+# inherits GID 0 and remains writable by any arbitrary UID.
 VOLUME ["/data"]
 
 # Environment
@@ -42,7 +43,7 @@ ENV PORT=3000 \
     CORS_ORIGIN="" \
     LOG_LEVEL=info \
     HOME=/home/mcm \
-    NODE_OPTIONS="--max-old-space-size=256 --optimize-for-size"
+    NODE_OPTIONS="--max-old-space-size=256"
 
 EXPOSE 3000
 

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: meta-chapter-manager-data
+  labels:
+    app: meta-chapter-manager
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  # Omit storageClassName to use the cluster default.
+  # Set it explicitly if your cluster has a preferred class, e.g.:
+  # storageClassName: standard

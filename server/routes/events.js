@@ -1,5 +1,6 @@
 ﻿const express = require('express');
 const { readChapters, readChapterEvents, readChapterEvent, writeChapterEvent } = require('../lib/gitdb');
+const { validateIds } = require('../lib/validate');
 
 const router = express.Router();
 
@@ -36,8 +37,9 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/events/:id?chapterId=nsk
-router.get('/:id', async (req, res) => {
+router.get('/:id', validateIds({ param: 'id' }), async (req, res) => {
   const chapterId = req.query.chapterId;
+  if (chapterId && !require('../lib/validate').isValidId(chapterId)) return res.status(400).json({ error: 'Ungültige chapterId' });
   try {
     if (chapterId) {
       return res.json(await readChapterEvent(chapterId, req.params.id));
@@ -54,13 +56,16 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/events â€“ neues Event anlegen
-router.post('/', async (req, res) => {
+router.post('/', validateIds({ body: 'chapterId' }, 'sparte'), async (req, res) => {
   const { kuerzel } = req.user;
   const { chapterId } = req.body;
   if (!chapterId) return res.status(400).json({ error: 'chapterId erforderlich' });
   if (!canAccessChapter(req.user, chapterId)) return res.status(403).json({ error: 'Kein Zugriff auf dieses Verein' });
 
-  const id = req.body.id || `${req.body.datum || Date.now()}-${req.body.sparte || 'xx'}-${Date.now()}`;
+  // Always generate the event ID server-side to prevent path traversal
+  const safeSparte = (req.body.sparte || 'xx').replace(/[^a-z0-9-]/g, '');
+  const safeDatum = (req.body.datum || '').replace(/[^0-9-]/g, '') || new Date().toISOString().slice(0, 10);
+  const id = `${safeDatum}-${safeSparte}-${Date.now()}`;
   const event = {
     ...req.body,
     id,
@@ -79,7 +84,7 @@ router.post('/', async (req, res) => {
 });
 
 // POST /api/events/:id/approve â€“ freigeben
-router.post('/:id/approve', async (req, res) => {
+router.post('/:id/approve', validateIds({ param: 'id' }, { body: 'chapterId' }), async (req, res) => {
   const { kuerzel } = req.user;
   const { chapterId } = req.body;
   if (!chapterId) return res.status(400).json({ error: 'chapterId erforderlich' });
@@ -97,7 +102,7 @@ router.post('/:id/approve', async (req, res) => {
 });
 
 // POST /api/events/:id/reject â€“ ablehnen
-router.post('/:id/reject', async (req, res) => {
+router.post('/:id/reject', validateIds({ param: 'id' }, { body: 'chapterId' }), async (req, res) => {
   const { kuerzel } = req.user;
   const { chapterId } = req.body;
   if (!chapterId) return res.status(400).json({ error: 'chapterId erforderlich' });

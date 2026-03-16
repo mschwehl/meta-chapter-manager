@@ -19,7 +19,8 @@ function requestMiddleware() {
     const start = Date.now();
     res.on('finish', () => {
       if (/^\/(vendor|lib)\//.test(req.path)) return;
-      log('info', 'http', {
+      const isWrite = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+      log(isWrite ? 'info' : 'debug', 'http', {
         method: req.method,
         path: req.path,
         status: res.statusCode,

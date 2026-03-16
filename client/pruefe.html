@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MCM â€“ Veranstaltung prÃ¼fen</title>
   <script src="/vendor/tailwindcss-browser.js"></script>
+  <script src="/store.js"></script>
   <script src="/i18n.js"></script>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -384,9 +385,9 @@
 
   createApp({
     setup() {
-      const token = localStorage.getItem('token');
+      const token = MCM_STORE.get('token');
       if (!token) { window.location.href = '/login.html'; }
-      const user = ref(JSON.parse(localStorage.getItem('user') || '{}'));
+      const user = ref(JSON.parse(MCM_STORE.get('user') || '{}'));
       const i18n = MCM_I18N;
 
       const steps = ['Veranstaltung & PDF', 'Teilnehmer prÃ¼fen', 'Download'];

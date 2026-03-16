@@ -53,7 +53,9 @@ router.post('/generate-word', async (req, res) => {
     eventDetails.spartenleiterVorname = req.user.vorname;
 
     const buffer = await generateFreigabedokument(eventDetails, participants);
-    const filename = `freigabe-${eventDetails.datum || 'dokument'}-${eventDetails.sparte || ''}.docx`;
+    const safeDatum  = (eventDetails.datum  || 'dokument').replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const safeSparte = (eventDetails.sparte || '')        .replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const filename = `freigabe-${safeDatum}-${safeSparte}.docx`;
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

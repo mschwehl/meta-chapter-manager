@@ -19,6 +19,7 @@ router.get('/search', async (req, res) => {
 
 // GET /api/users/:kuerzel
 router.get('/:kuerzel', async (req, res) => {
+  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(req.params.kuerzel)) return res.status(400).json({ error: 'Ungültiges Kürzel' });
   try {
     const user = await readUser(req.params.kuerzel);
     res.json(user);
