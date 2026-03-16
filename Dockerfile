@@ -20,6 +20,14 @@ RUN cd server && npm ci --omit=dev
 COPY server/ ./server/
 COPY client/ ./client/
 
+# Download vendor libs (Tailwind CSS, Vue) into client/vendor/
+COPY download-vendor.js ./
+RUN node download-vendor.js && rm download-vendor.js
+
+# Ensure a default branding.custom.js exists (override via volume mount)
+RUN test -f client/branding.custom.js \
+ || printf '// branding.custom.js — Override via volume mount\n// Object.assign(window.APP_BRANDING, { logoText: "XYZ", orgName: "Mein Verein" });\n' > client/branding.custom.js
+
 # Apply OpenShift group-write pattern:
 # chown to 1001:0 then chmod g=u so any UID with GID=0 (OpenShift's default)
 # has the same filesystem access as the declared owner.
