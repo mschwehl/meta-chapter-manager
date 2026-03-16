@@ -98,7 +98,6 @@ View logs:
 ```bash
 docker compose logs -f
 ```
-
 ---
 
 ## Deploy to OpenShift
