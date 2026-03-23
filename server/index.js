@@ -14,7 +14,7 @@ const orgaRoutes = require('./routes/orga');
 const docsRoutes = require('./routes/docs');
 const requestsRoutes = require('./routes/requests');
 const { authMiddleware } = require('./middleware/auth');
-const { initDatabase, startAutoSync, gitCommitAndPush, readUser, isDemoMode, readOrganisation } = require('./lib/gitdb');
+const { initDatabase, startAutoSync, gitCommitAndPush, readUser, readOrganisation, startGitWatchdog, stopGitWatchdog } = require('./lib/gitdb');
 const sse = require('./lib/sse');
 const { version: APP_VERSION } = require('./package.json');
 const logger = require('./lib/logger');
@@ -49,7 +49,7 @@ app.post('/api/auth/register', registerLimiter, (req, res, next) => { req.url = 
 app.get('/api/status', async (_req, res) => {
   let orgName = null;
   try { const org = await readOrganisation(); orgName = org.name || null; } catch { /* db may not be ready yet */ }
-  res.json({ demoMode: isDemoMode(), orgName, version: APP_VERSION });
+  res.json({ orgName, version: APP_VERSION });
 });
 
 // GET /api/sse – Server-Sent Events stream (token via query param)
@@ -139,9 +139,11 @@ async function start() {
 
   // Start periodic git commit + push (every 5 minutes)
   startAutoSync();
+  // Start git watchdog (checks every 60 s for stuck lock / orphaned processes)
+  startGitWatchdog();
 
   app.listen(config.port, () => {
-    logger.info('startup.listen', { port: config.port, demoMode: isDemoMode() });
+    logger.info('startup.listen', { port: config.port });
     console.log(`Server started on http://localhost:${config.port}`);
   });
 }
@@ -154,6 +156,7 @@ start().catch(err => {
 // Graceful shutdown on SIGTERM (pod eviction, docker stop, k8s rolling update)
 async function shutdown(signal) {
   logger.info('shutdown', { signal });
+  stopGitWatchdog();
   try {
     const result = await gitCommitAndPush();
     logger.info('shutdown.git', { committed: result.committed, pushed: result.pushed });

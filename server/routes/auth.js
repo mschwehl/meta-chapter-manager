@@ -34,6 +34,15 @@ router.post('/login', loginLimiter, async (req, res) => {
     return res.status(400).json({ error: 'Kürzel und Passwort erforderlich' });
   }
 
+  // Reject immediately if no user profile exists.
+  // This closes the phantom-login gap where kuerzel === password would succeed
+  // for any string that has no credential entry yet.
+  const user = await readUser(kuerzel).catch(() => null);
+  if (!user) {
+    logger.warn('auth.login.fail', { user: kuerzel, ip: req.ip, reason: 'user_not_found' });
+    return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
+  }
+
   const credential = await getCredential(kuerzel);
 
   // No credential entry = kuerzel is the initial password (set on account creation / after reset)
@@ -53,7 +62,6 @@ router.post('/login', loginLimiter, async (req, res) => {
     logger.info('auth.login.ok', { user: kuerzel, ip: req.ip });
   }
 
-  const user = await readUser(kuerzel).catch(() => ({ kuerzel, name: '', vorname: '' }));
   const chapters = await readChapters();
   const org = await readOrganisation().catch(() => ({ orgAdmins: [] }));
 

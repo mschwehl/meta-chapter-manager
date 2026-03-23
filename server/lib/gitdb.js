@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const { execFile } = require('child_process');
 const simpleGit = require('simple-git');
 const config = require('../config');
 const logger = require('./logger');
@@ -7,7 +8,6 @@ const logger = require('./logger');
 const sse = require('./sse');
 
 let DB_PATH = config.dataDir;
-let _isDemoMode = false;
 
 // Short-lived in-memory cache for credentials.json (used at login / password change).
 let _credCache = null;
@@ -20,14 +20,117 @@ const CRED_CACHE_TTL = 10_000; // 10 seconds
 // After a server restart old tokens remain valid until they expire naturally (8 h).
 const _revokedAt = new Map();
 
-function isDemoMode() { return _isDemoMode; }
+// Build a simpleGit instance with the process-kill timeout and SSL config always applied.
+// Use this everywhere instead of calling simpleGit() directly so no subprocess can
+// ever block indefinitely and leave a dead daemon thread.
+function makeGit(optsOverride = {}) {
+  const sslConfig = !config.gitSslVerify ? ['http.sslVerify=false'] : [];
+  const opts = {
+    ...(config.gitTimeoutMs > 0 ? { timeout: { block: config.gitTimeoutMs } } : {}),
+    ...optsOverride,
+    config: [...sslConfig, ...(optsOverride.config || [])],
+  };
+  if (opts.config.length === 0) delete opts.config;
+  return simpleGit(opts);
+}
 
 function getGit() {
-  const opts = { baseDir: DB_PATH };
-  if (!config.gitSslVerify) {
-    opts.config = ['http.sslVerify=false'];
+  return makeGit({ baseDir: DB_PATH });
+}
+
+// Serialise all git operations via a promise chain.
+// Prevents concurrent git subprocesses from racing over the lock file and
+// accumulating as dead daemon threads when the remote is slow/unreachable.
+let _gitChain = Promise.resolve();
+let _gitLockAcquiredAt = 0;   // epoch ms when the current op started (0 = idle)
+let _gitLockOpsTotal  = 0;   // monotone counter – used by watchdog to detect stuck chain
+
+function withGitLock(fn) {
+  const next = _gitChain.then(() => {
+    _gitLockAcquiredAt = Date.now();
+    _gitLockOpsTotal++;
+    return fn();
+  }, () => {
+    _gitLockAcquiredAt = Date.now();
+    _gitLockOpsTotal++;
+    return fn();
+  }).finally(() => {
+    _gitLockAcquiredAt = 0;
+  });
+  _gitChain = next.catch(() => {});
+  return next;
+}
+
+// ---------------------------------------------------------------------------
+// Git watchdog
+// Runs every WATCHDOG_INTERVAL_MS and:
+//   1. Warns if the lock chain has been held longer than the kill threshold.
+//   2. Removes stale .git/index.lock files left by killed processes.
+//   3. On Linux/macOS: kills any orphaned git subprocesses older than the
+//      timeout (best-effort, non-fatal on Windows where `pkill` is absent).
+// ---------------------------------------------------------------------------
+const WATCHDOG_INTERVAL_MS = 60_000; // check every minute
+
+function _killOrphanGitProcs(thresholdMs) {
+  // Works on Linux/macOS. On Windows there is no `pkill`, so we skip silently.
+  const isUnix = process.platform !== 'win32';
+  if (!isUnix) return;
+  // Find git processes running longer than threshold seconds
+  const minSec = Math.ceil(thresholdMs / 1000);
+  execFile('sh', ['-c',
+    `pgrep -x git | while read pid; do
+       etime=$(ps -o etimes= -p $pid 2>/dev/null | tr -d ' ');
+       [ -n "$etime" ] && [ "$etime" -gt ${minSec} ] && kill -9 $pid && echo $pid;
+     done`
+  ], (err, stdout) => {
+    const killed = stdout.trim().split('\n').filter(Boolean);
+    if (killed.length > 0) {
+      logger.warn('git.watchdog.killed', { pids: killed, reason: `running >${minSec}s` });
+    }
+  });
+}
+
+async function _removeStaleLock() {
+  const lockFile = path.join(DB_PATH, '.git', 'index.lock');
+  try {
+    const stat = await fs.stat(lockFile);
+    const ageMs = Date.now() - stat.mtimeMs;
+    const threshold = (config.gitTimeoutMs > 0 ? config.gitTimeoutMs : 30_000) * 2;
+    if (ageMs > threshold) {
+      await fs.unlink(lockFile);
+      logger.warn('git.watchdog.lock_removed', { ageMs, lockFile });
+      // Reset the chain so future ops are not permanently blocked
+      _gitChain = Promise.resolve();
+      _gitLockAcquiredAt = 0;
+    }
+  } catch {
+    // Lock file does not exist – that's the normal case
   }
-  return simpleGit(opts);
+}
+
+let _watchdogInterval = null;
+
+function startGitWatchdog() {
+  if (_watchdogInterval) clearInterval(_watchdogInterval);
+  const threshold = (config.gitTimeoutMs > 0 ? config.gitTimeoutMs : 30_000) * 2;
+  _watchdogInterval = setInterval(async () => {
+    // 1. Check if the lock has been held too long
+    if (_gitLockAcquiredAt > 0) {
+      const heldMs = Date.now() - _gitLockAcquiredAt;
+      if (heldMs > threshold) {
+        logger.warn('git.watchdog.lock_stuck', { heldMs, thresholdMs: threshold });
+      }
+    }
+    // 2. Remove stale index.lock
+    await _removeStaleLock();
+    // 3. Kill orphaned OS-level git processes
+    _killOrphanGitProcs(threshold);
+  }, WATCHDOG_INTERVAL_MS);
+  logger.info('startup.git_watchdog', { intervalSec: WATCHDOG_INTERVAL_MS / 1000, thresholdMs: threshold });
+}
+
+function stopGitWatchdog() {
+  if (_watchdogInterval) { clearInterval(_watchdogInterval); _watchdogInterval = null; }
 }
 
 /**
@@ -57,45 +160,25 @@ async function initDatabase() {
 
   if (!url) {
     // No remote URL – ensure local dir is a git repo
-    const git = simpleGit(dir);
+    const git = makeGit({ baseDir: dir });
     const isRepo = await git.checkIsRepo().catch(() => false);
     if (!isRepo) {
       await git.init();
       await ensureGitIdentity(git);
-      // Create initial structure if empty
+      // Create minimal empty structure — admin account is created by ensureBootstrapAdmin()
       const orgPath = path.join(dir, 'organisation.json');
       try { await fs.access(orgPath); } catch {
-        // Demo mode: pre-populate with admin user
-        _isDemoMode = true;
-        const bcrypt = require('bcryptjs');
-        const adminHash = await bcrypt.hash('admin', 12);
-
-        await fs.writeFile(orgPath, JSON.stringify({
-          id: 'org', name: 'Demo-Organisation', chapters: ['demo'],
-          orgAdmins: ['admin'], zeitstelle: []
-        }, null, 2));
-        await fs.mkdir(path.join(dir, 'chapter', 'demo', 'sparte'), { recursive: true });
-        await fs.mkdir(path.join(dir, 'chapter', 'demo', 'events'), { recursive: true });
-        await fs.mkdir(path.join(dir, 'user'), { recursive: true });
+        await fs.mkdir(path.join(dir, 'chapter'), { recursive: true });
+        await fs.mkdir(path.join(dir, 'user'),    { recursive: true });
         await fs.mkdir(path.join(dir, 'requests'), { recursive: true });
-        await fs.writeFile(path.join(dir, 'chapter', 'demo', 'chapter.json'),
-          JSON.stringify({ id: 'demo', name: 'Demo-Chapter', admins: ['admin'], gegruendet: null }, null, 2));
-        await fs.writeFile(path.join(dir, 'user', 'admin.json'),
-          JSON.stringify({ kuerzel: 'admin', name: 'Admin', vorname: 'Demo', chapters: [] }, null, 2));
-        await fs.writeFile(path.join(dir, 'credentials.json'),
-          JSON.stringify({ admin: { hash: adminHash, mustChange: false } }, null, 2));
+        await fs.writeFile(orgPath, JSON.stringify({
+          id: 'org', name: '', chapters: [], orgAdmins: [], zeitstelle: []
+        }, null, 2));
         await git.add('.');
-        await git.commit('Demo: Initial database structure');
-        logger.warn('startup.demo', { msg: 'DEMO-MODUS aktiv – Anmeldung: admin / admin' });
+        await git.commit('Init: empty database structure');
       }
     } else {
       await ensureGitIdentity(git);
-      // Check if this looks like a demo repo (no GIT_DB_URL and only admin user)
-      try {
-        const orgRaw = await fs.readFile(path.join(dir, 'organisation.json'), 'utf-8');
-        const orgData = JSON.parse(orgRaw);
-        if (!config.gitDbUrl && orgData.name === 'Demo-Organisation') _isDemoMode = true;
-      } catch { /* ignore */ }
     }
     logger.info('startup.db', { mode: 'local', dir });
     return;
@@ -111,16 +194,16 @@ async function initDatabase() {
   try {
     await fs.access(path.join(dir, '.git'));
     // Already cloned – update remote URL with credentials, then pull
-    const git = simpleGit({ baseDir: dir, config: !config.gitSslVerify ? ['http.sslVerify=false'] : [] });
+    const git = makeGit({ baseDir: dir });
     await ensureGitIdentity(git);
     await git.env(gitEnv).remote(['set-url', 'origin', authUrl]);
     await git.env(gitEnv).pull('origin', branch);
     logger.info('startup.db', { mode: 'pull', url: url.replace(/:[^@]*@/, ':***@'), branch });
   } catch {
     // Not yet cloned – clone
-    const git = simpleGit({ config: !config.gitSslVerify ? ['http.sslVerify=false'] : [] });
+    const git = makeGit();
     await git.env(gitEnv).clone(authUrl, dir, ['--branch', branch]);
-    const clonedGit = simpleGit({ baseDir: dir });
+    const clonedGit = makeGit({ baseDir: dir });
     await ensureGitIdentity(clonedGit);
     // Keep credentials in remote URL for future pushes
     await clonedGit.env(gitEnv).remote(['set-url', 'origin', authUrl]);
@@ -181,62 +264,63 @@ function _fileCategory(filePath) {
 }
 
 /**
- * Stage all changes, commit, and push to remote (if configured).
- * Called after every write. Push only happens when GIT_DB_URL is set.
+ * Stage all changes and commit locally.
+ * Push to the remote is intentionally NOT done here — it happens only in
+ * gitCommitAndPush() (autosync every 5 min) so that a slow/unreachable remote
+ * can never block a write request or leave a dead daemon thread behind.
+ * All operations are serialised via withGitLock to avoid lock-file races.
  */
 async function gitSave(commitMessage, authorKuerzel) {
-  const git = getGit();
-  try {
-    await git.add('.');
-    const status = await git.status();
-    if (status.staged.length === 0) return; // nothing to commit
-    const kuerzel = authorKuerzel || 'system';
-    const author = `${kuerzel} <${kuerzel}@mcm.local>`;
-    const message = `${kuerzel}: ${commitMessage}`;
-    await git.commit(message, { '--author': author });
-    if (config.gitDbUrl) {
-      const gitEnv = {};
-      if (!config.gitSslVerify) gitEnv.GIT_SSL_NO_VERIFY = '1';
-      await git.env(gitEnv).remote(['set-url', 'origin', buildAuthUrl(config.gitDbUrl)]);
-      await git.env(gitEnv).push(['-u', 'origin', config.gitDbBranch]);
-      logger.info('git.push', { msg: commitMessage });
-    } else {
+  return withGitLock(async () => {
+    const git = getGit();
+    try {
+      await git.add('.');
+      const status = await git.status();
+      if (status.staged.length === 0) return; // nothing to commit
+      const kuerzel = authorKuerzel || 'system';
+      const author = `${kuerzel} <${kuerzel}@mcm.local>`;
+      const message = `${kuerzel}: ${commitMessage}`;
+      await git.commit(message, { '--author': author });
       logger.debug('git.commit', { msg: commitMessage });
+    } catch (e) {
+      // File is already saved – don't let git errors break the API
+      logger.error('git.save', { err: e.message });
     }
-  } catch (e) {
-    // File is already saved – don't let git errors break the API
-    logger.error('git.save', { err: e.message });
-  }
+  });
 }
 
 /**
  * Commit all staged changes and push to remote (if configured).
  * Called periodically (every 5 min) and on manual trigger.
+ * Serialised via withGitLock; the per-operation timeout in getGit() ensures
+ * a hung push is killed after GIT_TIMEOUT_MS and does not block the queue.
  */
 async function gitCommitAndPush() {
-  const git = getGit();
-  try {
-    const status = await git.status();
-    if (status.staged.length === 0 && status.not_added.length === 0 && status.modified.length === 0) {
-      return { committed: false, pushed: false, message: 'Keine Änderungen' };
+  return withGitLock(async () => {
+    const git = getGit();
+    try {
+      const status = await git.status();
+      if (status.staged.length === 0 && status.not_added.length === 0 && status.modified.length === 0) {
+        return { committed: false, pushed: false, message: 'Keine Änderungen' };
+      }
+      // Stage everything (catches any missed files)
+      await git.add('.');
+      await git.commit(`Auto-Sync ${new Date().toISOString()}`, {
+        '--author': 'system <system@mcm.local>'
+      });
+      let pushed = false;
+      if (config.gitDbUrl) {
+        const gitEnv = {};
+        if (!config.gitSslVerify) gitEnv.GIT_SSL_NO_VERIFY = '1';
+        await git.env(gitEnv).remote(['set-url', 'origin', buildAuthUrl(config.gitDbUrl)]);
+        await git.env(gitEnv).push(['-u', 'origin', config.gitDbBranch]);
+        pushed = true;
+      }
+      return { committed: true, pushed, message: 'Synchronisiert' };
+    } catch (e) {
+      return { committed: false, pushed: false, message: e.message };
     }
-    // Stage everything (catches any missed files)
-    await git.add('.');
-    await git.commit(`Auto-Sync ${new Date().toISOString()}`, {
-      '--author': 'system <system@mcm.local>'
-    });
-    let pushed = false;
-    if (config.gitDbUrl) {
-      const gitEnv = {};
-      if (!config.gitSslVerify) gitEnv.GIT_SSL_NO_VERIFY = '1';
-      await git.env(gitEnv).remote(['set-url', 'origin', buildAuthUrl(config.gitDbUrl)]);
-      await git.env(gitEnv).push(['-u', 'origin', config.gitDbBranch]);
-      pushed = true;
-    }
-    return { committed: true, pushed, message: 'Synchronisiert' };
-  } catch (e) {
-    return { committed: false, pushed: false, message: e.message };
-  }
+  });
 }
 
 let _syncInterval = null;
@@ -499,7 +583,15 @@ async function ensureBootstrapAdmin() {
   if (status.staged.length > 0) {
     await git.commit('Bootstrap: admin user created (change password on first login)');
   }
-  logger.warn('startup.bootstrap', { msg: `Bootstrap admin created — Kuerzel: admin / Passwort: ${bootstrapPassword} — Passwort sofort ändern!` });
+  const msg = `Bootstrap admin created — Kuerzel: admin / Passwort: ${bootstrapPassword} — Passwort sofort aendern!`;
+  logger.warn('startup.bootstrap', { msg });
+  // Also print prominently to stdout so ops can find it in container/pod logs
+  console.log('\n' + '='.repeat(72));
+  console.log('  INITIAL ADMIN PASSWORD');
+  console.log(`  Kuerzel : admin`);
+  console.log(`  Passwort: ${bootstrapPassword}`);
+  console.log('  Bitte das Passwort nach dem ersten Login sofort aendern!');
+  console.log('='.repeat(72) + '\n');
 }
 
 async function readUser(kuerzel) {
@@ -548,12 +640,13 @@ async function readAllUsers() {
 
 module.exports = {
   DB_PATH,
-  isDemoMode,
   initDatabase,
   getDbPath,
   gitCommitAndPush,
   startAutoSync,
   stopAutoSync,
+  startGitWatchdog,
+  stopGitWatchdog,
   readCredentials,
   getCredential,
   writeCredential,

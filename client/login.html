@@ -21,11 +21,6 @@
       <p class="text-slate-400 text-sm mt-1">{{ orgName }}</p>
     </div>
 
-    <!-- Demo banner -->
-    <div v-if="demoMode" class="mb-4 px-4 py-3 rounded-xl bg-amber-400/15 border border-amber-400/40 text-amber-200 text-[13px] text-center">
-      <span class="font-semibold">Demo-Modus</span> · Kürzel <code class="font-mono bg-amber-400/20 px-1 rounded">admin</code> · Passwort <code class="font-mono bg-amber-400/20 px-1 rounded">admin</code>
-    </div>
-
     <!-- Login Card -->
     <div class="bg-white rounded-2xl shadow-2xl shadow-black/20 p-7">
       <h2 class="text-gray-800 font-semibold text-base mb-5">Anmelden</h2>
@@ -89,7 +84,6 @@
         const form = reactive({ kuerzel: '', password: '' });
         const error = ref('');
         const loading = ref(false);
-        const demoMode = ref(false);
         const orgName = ref(window.APP_BRANDING.orgName);
         const version = ref('');
 
@@ -104,7 +98,6 @@
           }
           try {
             const st = await fetch('/api/status').then(r => r.json());
-            if (st.demoMode) demoMode.value = true;
             if (st.orgName)  orgName.value  = st.orgName;
             if (st.version)  version.value  = st.version;
           } catch { /* server may not be ready */ }
@@ -142,7 +135,7 @@
           }
         }
 
-        return { form, error, loading, login, branding: window.APP_BRANDING, demoMode, orgName, version };
+        return { form, error, loading, login, branding: window.APP_BRANDING, orgName, version };
       }
     }).mount('#app');
   </script>
