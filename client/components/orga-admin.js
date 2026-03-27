@@ -5,7 +5,7 @@
  */
 const OrgaAdmin = {
   name: 'OrgaAdmin',
-  inject: ['api', 'apiPut', 'i18n', 'user', 'isOrgaAdmin', 'userNameCache', 'uPickSearch', 'uPickAdd', 'uPickRemove', 'uPickKeydown'],
+  inject: ['api', 'apiPut', 'i18n', 'user', 'isOrgaAdmin', 'userNameCache', 'uPickSearch', 'uPickAdd', 'uPickRemove', 'uPickKeydown', 'sseEvent'],
   data() {
     return {
       org: null,
@@ -15,7 +15,7 @@ const OrgaAdmin = {
       picker: { search: '', results: [], list: [], activeIdx: -1 },
       gitLog: [],
       gitLogLoading: false,
-      gitLogOpen: false,
+      gitLogOpen: true,
     };
   },
   methods: {
@@ -61,7 +61,10 @@ const OrgaAdmin = {
       return d.toLocaleString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
     },
   },
-  mounted() { this.load(); },
+  watch: {
+    sseEvent(evt) { if (evt?.category === 'organisation') this.load(); },
+  },
+  mounted() { this.load(); this.loadGitLog(); },
   template: `
 <div class="p-6 max-w-4xl mx-auto space-y-4">
   <h1 class="text-xl font-bold text-gray-800">Organisation</h1>
@@ -119,9 +122,10 @@ const OrgaAdmin = {
       <div v-else-if="!gitLog.length" class="p-6 text-center text-gray-300 text-xs">Keine Einträge</div>
       <div v-else class="divide-y divide-gray-50 max-h-96 overflow-y-auto">
         <div v-for="entry in gitLog" :key="entry.hash" class="px-6 py-3 flex items-start gap-3 hover:bg-gray-50 text-xs">
-          <span class="font-mono text-gray-300 shrink-0 mt-0.5">{{ entry.hash.slice(0,7) }}</span>
+          <span class="font-mono text-blue-400 shrink-0 mt-0.5 select-all bg-gray-50 px-1 rounded">{{ entry.hash.slice(0,7) }}</span>
           <div class="flex-1 min-w-0">
             <div class="text-gray-800 truncate">{{ entry.message }}</div>
+            <div class="text-gray-400 mt-0.5">{{ entry.author }}</div>
           </div>
           <span class="text-gray-400 shrink-0 whitespace-nowrap">{{ fmtDate(entry.date) }}</span>
         </div>

@@ -39,6 +39,9 @@ app.use((_req, res, next) => {
 
 app.use(express.static(path.join(__dirname, '../client')));
 
+// Redirect /favicon.ico to /favicon.svg
+app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
+
 // Public routes
 app.use('/api/auth', authRoutes);
 // Public registration: rate-limited, rewrite URL so requestsRouter matches /register
@@ -92,9 +95,10 @@ app.use('/api/docs', authMiddleware, docsRoutes);
 app.get('/api/me', authMiddleware, async (req, res) => {
   try {
     const u = await readUser(req.user.kuerzel);
-    res.json(u);
+    // Merge JWT-derived flags so the client keeps orgaAdmin / zeitstelle / roles
+    res.json({ ...u, orgaAdmin: req.user.orgaAdmin || false, zeitstelle: req.user.zeitstelle || false, roles: req.user.roles || {} });
   } catch {
-    res.json({ kuerzel: req.user.kuerzel, name: req.user.name, vorname: req.user.vorname, chapters: [] });
+    res.json({ kuerzel: req.user.kuerzel, name: req.user.name, vorname: req.user.vorname, chapters: [], orgaAdmin: req.user.orgaAdmin || false, zeitstelle: req.user.zeitstelle || false, roles: req.user.roles || {} });
   }
 });
 

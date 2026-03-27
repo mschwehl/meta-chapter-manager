@@ -7,8 +7,9 @@ data/
 docs/
 database/
 
-# Vendor files (downloaded via download-vendor.js)
-client/vendor/
+# Vendor files are committed to the repo for airgapped/offline builds.
+# Run `node download-vendor.js` to update them when internet is available.
+# client/vendor/   <-- intentionally NOT ignored
 
 # Environment / secrets
 .env

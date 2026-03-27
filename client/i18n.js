@@ -43,7 +43,7 @@ const MCM_TRANSLATIONS = {
 
   /* ── Rollen ───────────────────────────────────────────────────── */
   roles: {
-    superadmin:    'Superadmin',
+    chapteradmin:  'Chapter-Admin',
     spartenadmin:  'Spartenadmin',
     user:          'Mitglied'
   },
@@ -72,7 +72,7 @@ const MCM_TRANSLATIONS = {
     erstelltAm:      'Erstellt am',
     freigaben:       'Freigaben',
     kommentar:       'Kommentar',
-    superadmins:     'Superadmins',
+    admins:          'Chapter-Admins',
     spartenadmins:   'Spartenadmins',
     sparten:         'Sparten'
   }

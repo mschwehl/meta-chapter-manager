@@ -25,7 +25,12 @@ Data is stored in a plain JSON git repository — no external database required.
 cd server
 npm install
 
-# 2. Run with file-watcher and dev JWT secret (no .env needed)
+# 2. Download vendor files (Tailwind CSS, Vue — not committed to git)
+cd ..
+node download-vendor.js
+
+# 3. Run with file-watcher and dev JWT secret (no .env needed)
+cd server
 npm run dev
 ```
 

@@ -5,6 +5,10 @@ const logger = require('../lib/logger');
 
 const JWT_SECRET = config.jwtSecret;
 
+// Tokens issued before this timestamp (i.e. before this server process started)
+// are rejected — ensures a pod/server restart forces everyone to re-login.
+const SERVER_START_MS = Date.now();
+
 function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -14,8 +18,13 @@ function authMiddleware(req, res, next) {
   const token = authHeader.slice(7);
   try {
     const payload = jwt.verify(token, JWT_SECRET);
+
+    // Reject tokens issued before this server process started.
+    if (payload.iat * 1000 < SERVER_START_MS) {
+      return res.status(401).json({ error: 'Sitzung abgelaufen, bitte neu anmelden' });
+    }
+
     // Check in-memory revocation table (role changes, admin-forced logout).
-    // No file I/O – purely in process memory.
     const revokedAt = getRevokedAt(payload.kuerzel);
     if (revokedAt && payload.iat * 1000 < revokedAt) {
       logger.warn('auth.session_revoked', { user: payload.kuerzel, ip: req.ip });

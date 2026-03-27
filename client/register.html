@@ -4,83 +4,153 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MCM – Registrierung</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <script>
+    (function(){
+      var s=localStorage.getItem('mcm-dark');
+      var sys=window.matchMedia('(prefers-color-scheme:dark)').matches;
+      if(s==='true'||(s===null&&sys)) document.documentElement.classList.add('dark');
+    })();
+  </script>
   <script src="/vendor/tailwindcss-browser.js"></script>
   <script src="/branding.js"></script>
   <script src="/branding.custom.js" onerror="void 0"></script>
+  <style>
+    * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; }
+    .auth-input { display:block; width:100%; padding:10px 13px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; color:#0f172a; outline:none; transition:all .15s ease; }
+    .auth-input:focus { background:#fff; border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.12); }
+    .auth-input::placeholder { color:#94a3b8; }
+    .auth-btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:10px 16px; background:#2563eb; color:#fff; font-weight:600; font-size:14px; border:none; border-radius:8px; cursor:pointer; transition:all .15s ease; letter-spacing:.01em; }
+    .auth-btn:hover:not(:disabled) { background:#1d4ed8; box-shadow:0 4px 14px rgba(37,99,235,.28); transform:translateY(-0.5px); }
+    .auth-btn:active:not(:disabled) { transform:scale(0.99); }
+    .auth-btn:disabled { opacity:.55; cursor:not-allowed; }
+    .brand-dots { background-image:radial-gradient(rgba(255,255,255,.14) 1px, transparent 1px); background-size:26px 26px; }
+    /* Dark mode */
+    :where(html.dark) .auth-input { background:#1e2130; border-color:#334155; color:#e2e8f0; }
+    :where(html.dark) .auth-input:focus { background:#252a3d; border-color:#3b82f6; }
+    :where(html.dark) .auth-input::placeholder { color:#475569; }
+  </style>
+  <style type="text/tailwindcss">
+    @custom-variant dark (&:where(.dark, .dark *));
+  </style>
 </head>
-<body class="bg-gradient-to-br from-blue-900 to-blue-700 min-h-screen flex items-center justify-center p-4">
-  <div id="app" class="w-full max-w-sm">
+<body>
+<div id="app" class="min-h-screen flex" style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
 
-    <!-- Logo -->
-    <div class="text-center mb-8">
-      <div class="inline-flex items-center justify-center w-20 h-20 bg-white rounded-2xl shadow-lg mb-4">
-        <span class="text-blue-800 text-3xl font-black">{{ branding.logoText }}</span>
+  <!-- ── Brand panel (lg+) ── -->
+  <div class="hidden lg:flex lg:w-[420px] xl:w-[460px] shrink-0 relative flex-col justify-between p-10 xl:p-12 overflow-hidden" style="background:#0f172a">
+    <div class="absolute inset-0 brand-dots opacity-50 pointer-events-none"></div>
+    <div class="absolute -top-40 -left-40 w-80 h-80 rounded-full pointer-events-none" style="background:radial-gradient(circle,rgba(59,130,246,.12) 0%,transparent 70%)"></div>
+    <div class="absolute -bottom-20 -right-10 w-72 h-72 rounded-full pointer-events-none" style="background:radial-gradient(circle,rgba(139,92,246,.08) 0%,transparent 70%)"></div>
+
+    <div class="relative z-10 flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl flex items-center justify-center text-white text-[11px] font-black shrink-0 shadow-lg" style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);box-shadow:0 4px 14px rgba(37,99,235,.35)">
+        {{ (branding.logoText || 'APP').slice(0,3) }}
       </div>
-      <h1 class="text-white text-2xl font-bold">Registrierung</h1>
-      <p class="text-blue-200 text-sm mt-1">{{ branding.orgName }}</p>
+      <span class="font-semibold text-sm" style="color:#e2e8f0">{{ branding.appName }}</span>
     </div>
 
-    <!-- Success state -->
-    <div v-if="sent" class="bg-white rounded-2xl shadow-2xl p-8 text-center">
-      <div class="text-5xl mb-4">✅</div>
-      <h2 class="text-gray-800 font-bold text-lg mb-2">Anfrage eingegangen!</h2>
-      <p class="text-gray-500 text-sm mb-6">Deine Registrierungsanfrage wurde übermittelt. Ein Organisations-Admin wird sie prüfen und dein Konto freischalten.</p>
-      <a href="/login.html" class="block w-full py-2.5 bg-blue-600 text-white font-semibold rounded-lg text-sm text-center hover:bg-blue-700 transition-colors">Zurück zum Login</a>
+    <div class="relative z-10 space-y-5">
+      <div>
+        <h1 class="text-2xl xl:text-[1.85rem] font-bold tracking-tight leading-[1.25] mb-3" style="color:#f1f5f9">{{ branding.orgName }}</h1>
+        <p class="text-sm leading-relaxed" style="color:#64748b">Erstelle dein Konto und werde Teil des Chapter-Netzwerks.</p>
+      </div>
+      <div class="p-4 rounded-xl" style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07)">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs" style="background:rgba(59,130,246,.2);color:#60a5fa">1</div>
+          <span class="text-xs" style="color:#94a3b8">Registrierung ausfüllen und absenden</span>
+        </div>
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs" style="background:rgba(59,130,246,.2);color:#60a5fa">2</div>
+          <span class="text-xs" style="color:#94a3b8">Admin prüft und genehmigt die Anfrage</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs" style="background:rgba(52,211,153,.15);color:#34d399">✓</div>
+          <span class="text-xs" style="color:#94a3b8">Konto wird freigeschaltet</span>
+        </div>
+      </div>
     </div>
 
-    <!-- Form -->
-    <div v-else class="bg-white rounded-2xl shadow-2xl p-8">
-      <h2 class="text-gray-800 font-semibold text-lg mb-1">Neues Konto beantragen</h2>
-      <p class="text-gray-400 text-xs mb-6">Ein Admin prüft deine Anfrage und aktiviert dein Konto.</p>
-
-      <form @submit.prevent="submit">
-        <div class="mb-4">
-          <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Kürzel *</label>
-          <input v-model="form.kuerzel" type="text" placeholder="z.B. m123 (Personalnummer)"
-            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required autocomplete="username" />
-          <p class="text-gray-400 text-[11px] mt-1">Kleinbuchstaben + Ziffern, z.B. s888</p>
-        </div>
-
-        <div class="mb-4">
-          <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Nachname *</label>
-          <input v-model="form.name" type="text" placeholder="Mustermann"
-            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required />
-        </div>
-
-        <div class="mb-4">
-          <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Vorname *</label>
-          <input v-model="form.vorname" type="text" placeholder="Max"
-            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required />
-        </div>
-
-        <div class="mb-6">
-          <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Bemerkung</label>
-          <textarea v-model="form.bemerkung" rows="2" placeholder="z.B. Abteilung, Kontakt, warum du dich registrierst …"
-            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"></textarea>
-        </div>
-
-        <div v-if="error" class="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-          {{ error }}
-        </div>
-
-        <button type="submit" :disabled="loading"
-          class="w-full py-3 bg-blue-700 text-white font-semibold rounded-lg hover:bg-blue-800 disabled:opacity-60 transition-colors text-sm">
-          <span v-if="loading">Wird gesendet …</span>
-          <span v-else>Registrierung beantragen</span>
-        </button>
-      </form>
-
-      <p class="text-center text-gray-400 text-xs mt-5">
-        Bereits registriert?
-        <a href="/login.html" class="text-blue-600 hover:underline font-medium">Anmelden</a>
-      </p>
+    <div class="relative z-10">
+      <p class="text-xs" style="color:#334155">{{ branding.copyright }}</p>
     </div>
-
-    <p class="text-center text-blue-300 text-xs mt-6">{{ branding.copyright }}</p>
   </div>
+
+  <!-- ── Form panel ── -->
+  <div class="flex-1 flex items-start justify-center p-6 bg-white dark:bg-[#0d1117] overflow-y-auto">
+    <div class="w-full max-w-[380px] py-8">
+
+      <!-- Mobile logo -->
+      <div class="text-center mb-8 lg:hidden">
+        <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-3 shadow-lg" style="background:linear-gradient(135deg,#3b82f6,#1d4ed8)">
+          <span class="text-white font-black text-sm">{{ (branding.logoText || 'APP').slice(0,3) }}</span>
+        </div>
+        <h1 class="font-bold text-lg text-gray-900 dark:text-gray-100">{{ branding.appName }}</h1>
+        <p class="text-sm mt-0.5 text-gray-500 dark:text-gray-400">{{ branding.orgName }}</p>
+      </div>
+
+      <!-- Success state -->
+      <div v-if="sent" class="text-center py-8">
+        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full mb-5" style="background:#d1fae5">
+          <svg class="w-8 h-8" style="color:#059669" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        </div>
+        <h2 class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Anfrage eingegangen!</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-8 leading-relaxed">Deine Registrierungsanfrage wurde übermittelt.<br>Ein Organisations-Admin wird sie prüfen und dein Konto freischalten.</p>
+        <a href="/login.html" class="auth-btn" style="text-decoration:none; display:inline-flex; width:auto; padding:10px 24px">Zurück zum Login</a>
+      </div>
+
+      <!-- Form -->
+      <div v-else>
+        <div class="mb-7 hidden lg:block">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Konto beantragen</h2>
+        <p class="text-sm mt-1 text-gray-500 dark:text-gray-400">Ein Admin prüft und schaltet dein Konto frei.</p>
+        </div>
+
+        <form @submit.prevent="submit" class="space-y-4">
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1.5" style="color:#64748b">Kürzel *</label>
+            <input v-model="form.kuerzel" type="text" placeholder="z.B. m123" autocomplete="username" class="auth-input" required />
+            <p class="text-[11px] mt-1" style="color:#94a3b8">Kleinbuchstaben + Ziffern, z.B. s888</p>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1.5" style="color:#64748b">Nachname *</label>
+              <input v-model="form.name" type="text" placeholder="Mustermann" class="auth-input" required />
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1.5" style="color:#64748b">Vorname *</label>
+              <input v-model="form.vorname" type="text" placeholder="Max" class="auth-input" required />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1.5" style="color:#64748b">Bemerkung <span class="normal-case font-normal" style="color:#cbd5e1">(optional)</span></label>
+            <textarea v-model="form.bemerkung" rows="2" placeholder="z.B. Abteilung, Kontakt, Hintergrund …"
+              class="auth-input resize-none" style="resize:none"></textarea>
+          </div>
+
+          <div v-if="error" class="flex items-start gap-2.5 px-3.5 py-3 rounded-lg" style="background:#fef2f2;border:1px solid #fecaca">
+            <svg class="w-4 h-4 shrink-0 mt-px" style="color:#ef4444" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+            <span class="text-sm" style="color:#b91c1c">{{ error }}</span>
+          </div>
+
+          <button type="submit" :disabled="loading" class="auth-btn" style="margin-top:8px">
+            <svg v-if="loading" class="w-4 h-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+            {{ loading ? 'Wird gesendet …' : 'Registrierung beantragen' }}
+          </button>
+        </form>
+
+        <p class="text-center text-sm mt-6" style="color:#94a3b8">
+          Bereits registriert?
+          <a href="/login.html" class="font-semibold" style="color:#2563eb">Anmelden</a>
+        </p>
+      </div>
+    </div>
+  </div>
+
+</div>
 
   <script src="/vendor/vue.global.prod.js"></script>
   <script>

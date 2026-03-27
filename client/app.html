@@ -4,13 +4,24 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MetaChapterManager</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <script>
+    /* Apply dark class before first paint to avoid flash */
+    (function(){
+      var s=localStorage.getItem('mcm-dark');
+      var sys=window.matchMedia('(prefers-color-scheme:dark)').matches;
+      if(s==='true'||(s===null&&sys)) document.documentElement.classList.add('dark');
+    })();
+  </script>
   <script src="/vendor/tailwindcss-browser.js"></script>
   <style type="text/tailwindcss">
+    @custom-variant dark (&:where(.dark, .dark *));
     @theme {
       --color-sidebar: #1a1d23;
       --color-sidebar-hover: #2a2d35;
       --color-sidebar-active: #2563eb;
-      --color-topbar: #0c0e13;
+      --color-topbar: #0f172a;
+      --color-surface: #f8fafc;
     }
   </style>
   <script src="/branding.js"></script>
@@ -25,11 +36,12 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: rgba(100,116,139,.35); border-radius: 9px; }
     ::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,.55); }
-    * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; box-sizing: border-box; }
     ::selection { background: rgba(59,130,246,.25); }
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
   </style>
 </head>
-<body class="bg-gray-50 h-screen overflow-hidden">
+<body class="bg-gray-50 dark:bg-[#0f1117] h-screen overflow-hidden">
 <div id="app" v-cloak class="flex h-screen">
 
   <!-- ═══════════════ MAIN AREA ══════════════════════════════════ -->
@@ -42,9 +54,9 @@
       <!-- Left cluster -->
       <div class="flex items-center gap-1.5 sm:gap-2.5 min-w-0 flex-1">
         <!-- Brand -->
-        <button @click="ctx ? (mod = 'dashboard') : (mod = 'ctx', ctx = null, window.history.pushState(null, '', '/app'))"
+        <button @click="goHome()"
           class="flex items-center gap-2 shrink-0 group focus:outline-none transition-all"
-          title="Dashboard">
+          title="Startseite">
           <div class="w-7 h-7 rounded-[8px] bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white text-[10px] font-black leading-none select-none shadow-sm shadow-blue-500/20 group-hover:shadow-blue-500/40 group-hover:scale-105 transition-all">
             {{ (branding.logoText || 'APP').slice(0,3) }}
           </div>
@@ -67,34 +79,17 @@
         </div>
 
         <!-- Module tabs -->
-        <template v-if="mod === 'settings'">
-          <div class="flex items-center gap-1.5 ml-1">
-            <span class="text-sm leading-none">⚙️</span>
-            <span class="text-gray-300 font-medium text-xs hidden sm:inline">Einstellungen</span>
-          </div>
-        </template>
-        <template v-else>
-          <div v-if="ctxModules.length > 1" class="flex items-center gap-0.5 ml-1">
+        <div v-if="ctxModules.length > 1" class="flex items-center gap-0.5 ml-1">
             <button v-for="m in ctxModules" :key="m.id" @click="mod = m.id"
               :class="mod === m.id ? 'bg-white/[.14] text-white shadow-sm shadow-black/10' : 'text-gray-400 hover:text-gray-200 hover:bg-white/[.07]'"
               class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all duration-150">
               <span class="text-xs">{{ m.icon }}</span><span class="hidden sm:inline">{{ m.label }}</span>
             </button>
           </div>
-          <span v-else-if="ctx" class="text-gray-500 text-[11px] ml-1.5 hidden sm:block font-medium">{{ currentModule?.label || '' }}</span>
-          <h2 v-if="!ctx" class="text-gray-300 font-medium text-xs ml-1">{{ currentModule?.label || '' }}</h2>
-        </template>
       </div>
 
       <!-- Right cluster -->
       <div class="flex items-center gap-1 sm:gap-1.5">
-        <!-- Role switch -->
-        <button v-if="ctxOptions.length > 1" @click="mod = 'ctx'; ctx = null; window.history.pushState(null, '', '/app')"
-          class="hidden sm:flex items-center gap-1.5 text-[12px] text-gray-300 hover:text-white rounded-md px-2.5 py-1.5 transition-all hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-blue-400/60 focus-visible:outline-none"
-          title="Rolle wechseln">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
-          <span class="font-medium">Rolle</span>
-        </button>
         <!-- Git sync (orgaAdmin only) -->
         <button v-if="isOrgaAdmin" @click="triggerSync" :title="syncStatus.text"
           class="hidden sm:flex items-center gap-1 text-[12px] rounded-md px-2 py-1.5 transition-all hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-blue-400/60 focus-visible:outline-none"
@@ -109,6 +104,16 @@
         </span>
         <!-- Version -->
         <span v-if="appVersion" class="hidden sm:inline text-[10px] text-gray-600 font-mono" title="Version">v{{ appVersion }}</span>
+
+        <!-- Dark mode toggle -->
+        <button @click="toggleDark"
+          class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 hover:text-gray-200 hover:bg-white/10 transition-all focus-visible:ring-2 focus-visible:ring-blue-400/60 focus-visible:outline-none"
+          :title="darkMode ? 'Hell-Modus' : 'Dunkel-Modus'">
+          <!-- Sun icon (shown in dark mode to switch to light) -->
+          <svg v-if="darkMode" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"/></svg>
+          <!-- Moon icon (shown in light mode to switch to dark) -->
+          <svg v-else class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/></svg>
+        </button>
 
         <!-- Separator -->
         <div class="w-px h-5 bg-white/15 mx-0.5 hidden sm:block"></div>
@@ -138,66 +143,64 @@
     </header>
 
     <!-- ─── Content ─── -->
-    <main class="flex-1 overflow-y-auto bg-gray-50/80">
+    <main class="flex-1 overflow-y-auto bg-gray-50/80 dark:bg-[#0f1117]">
 
       <!-- ════════ KONTEXT-AUSWAHL ════════ -->
-      <div v-if="mod === 'ctx'" class="min-h-full flex items-center justify-center p-6">
+      <div v-if="mod === 'ctx'" class="min-h-full flex flex-col items-center justify-center p-6 gap-10">
         <div class="w-full max-w-2xl">
-          <div class="mb-10 text-center">
-            <h1 class="text-2xl font-bold text-gray-800 tracking-tight">Willkommen, {{ user.vorname }}</h1>
-            <p class="text-gray-500 mt-1.5 text-sm">In welchem Kontext möchten Sie arbeiten?</p>
+          <div class="mb-8 text-center">
+            <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-4 text-white text-lg font-bold shadow-sm" style="background:linear-gradient(135deg,#3b82f6,#6366f1)">{{ user.vorname?.[0] || '' }}{{ user.name?.[0] || '' }}</div>
+            <h1 class="text-[1.4rem] font-bold text-gray-800 dark:text-gray-100 tracking-tight">{{ greetingText }}, {{ user.vorname }}</h1>
+            <p class="text-gray-400 dark:text-gray-500 mt-0.5 text-xs">{{ greetingDate }}</p>
+            <p class="text-gray-400 dark:text-gray-500 mt-1 text-sm">Wählen Sie einen Bereich, um zu starten.</p>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button v-for="opt in ctxOptions" :key="opt.type + (opt.chapterId||'') + (opt.sparteId||'')"
               @click="selectCtx(opt)"
-              class="text-left bg-white rounded-xl border border-gray-200/80 p-5 hover:border-blue-300 hover:shadow-md hover:shadow-blue-500/5 transition-all duration-200 group focus:outline-none focus:ring-2 focus:ring-blue-400/40 focus:ring-offset-1">
+              :style="{ borderLeft: '3px solid ' + ctxColor(opt.color) }"
+              class="text-left bg-white dark:bg-[#1a1d27] rounded-xl border border-gray-200/80 dark:border-[#2d3148] p-5 hover:shadow-md dark:hover:shadow-none dark:hover:border-[#3b4168] transition-all duration-200 group focus:outline-none focus:ring-2 focus:ring-blue-400/40 focus:ring-offset-1"
+              :class="'hover:border-[' + ctxColor(opt.color) + ']/40'">
               <div class="flex items-start gap-3.5">
-                <span class="text-2xl mt-0.5 grayscale group-hover:grayscale-0 transition-all duration-200">{{ opt.icon }}</span>
-                <div class="flex-1 min-w-0">
-                  <div v-if="opt.role" class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-0.5">{{ opt.role }}</div>
-                  <div class="font-semibold text-gray-800 group-hover:text-blue-600 transition-colors text-sm">{{ opt.label }}</div>
-                  <div v-if="opt.detail" class="text-blue-600 text-[13px] font-semibold mt-0.5">{{ opt.detail }}</div>
-                  <div class="text-gray-500 text-[12px] mt-1 leading-relaxed line-clamp-2">{{ opt.desc }}</div>
+                <div class="w-9 h-9 rounded-lg flex items-center justify-center text-base shrink-0 transition-all duration-200" :style="{ background: ctxColor(opt.color) + '18' }">
+                  {{ opt.icon }}
                 </div>
-                <svg class="w-4 h-4 text-gray-300 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all mt-1 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-              </div>
-            </button>
-            <!-- Technische Details (nur OrgaAdmin) -->
-            <button v-if="isOrgaAdmin" @click="mod = 'sysinfo'"
-              class="text-left bg-white/60 rounded-xl border border-dashed border-gray-200 p-5 hover:border-gray-300 hover:bg-white hover:shadow-sm transition-all duration-200 group focus:outline-none focus:ring-2 focus:ring-gray-400/30 focus:ring-offset-1">
-              <div class="flex items-start gap-3.5">
-                <span class="text-2xl mt-0.5 opacity-40 group-hover:opacity-70 transition-opacity">⚙️</span>
                 <div class="flex-1 min-w-0">
-                  <div class="font-semibold text-gray-500 group-hover:text-gray-700 transition-colors text-sm">Technisch</div>
-                  <div class="text-gray-400 text-[11px] mt-1 leading-relaxed">Server, Konfiguration, Datenbankstat.</div>
+                  <div v-if="opt.role" class="text-[10px] font-semibold uppercase tracking-wider mb-0.5" :style="{ color: ctxColor(opt.color) }">{{ opt.role }}</div>
+                  <div class="font-semibold text-gray-800 dark:text-gray-100 group-hover:text-gray-900 dark:group-hover:text-white transition-colors text-sm">{{ opt.label }}</div>
+                  <div v-if="opt.detail" class="text-[13px] font-semibold mt-0.5" :style="{ color: ctxColor(opt.color) }">{{ opt.detail }}</div>
+                  <div class="text-gray-400 dark:text-gray-500 text-[12px] mt-1 leading-relaxed line-clamp-2">{{ opt.desc }}</div>
+                  <div v-if="opt.type === 'orgadmin' && pendingCount > 0" class="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l2 2"/></svg>
+                    {{ pendingCount }} Freigabe{{ pendingCount === 1 ? '' : 'n' }} ausstehend
+                  </div>
                 </div>
-                <svg class="w-4 h-4 text-gray-200 group-hover:text-gray-400 group-hover:translate-x-0.5 transition-all mt-1 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                <svg class="w-4 h-4 text-gray-300 group-hover:translate-x-0.5 transition-all mt-0.5 shrink-0" :style="{ color: ctxColor(opt.color) + 'aa' }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
               </div>
             </button>
           </div>
         </div>
 
         <!-- Chapter directory (only for plain members — users with no admin roles) -->
-        <div v-if="chapterDirectory.length && !isOrgaAdmin && !isZeitstelle && !hasAnyChapterRole" class="w-full max-w-2xl mt-10">
+        <div v-if="chapterDirectory.length && !isOrgaAdmin && !isZeitstelle && !hasAnyChapterRole" class="w-full max-w-2xl">
           <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 text-center">Verfügbare Chapter</h2>
           <div class="space-y-3">
             <div v-for="ch in chapterDirectory" :key="ch.id"
-              class="bg-white rounded-xl border border-gray-200/80 p-5">
+              class="bg-white dark:bg-[#1a1d27] rounded-xl border border-gray-200/80 dark:border-[#2d3148] p-5">
               <div class="flex items-start justify-between gap-4">
                 <div>
-                  <div class="font-semibold text-gray-800 text-sm">{{ ch.name }}</div>
-                  <div v-if="ch.gegruendet" class="text-[11px] text-gray-400 mt-0.5">Gegründet {{ ch.gegruendet }}</div>
+                  <div class="font-semibold text-gray-800 dark:text-gray-100 text-sm">{{ ch.name }}</div>
+                  <div v-if="ch.gegruendet" class="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">Gegründet {{ ch.gegruendet }}</div>
                 </div>
                 <div v-if="ch.admins.length" class="flex flex-wrap gap-1 justify-end">
                   <span v-for="a in ch.admins" :key="a.kuerzel"
-                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-50 text-purple-600">
+                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300">
                     👤 {{ a.displayName }}
                   </span>
                 </div>
               </div>
               <div v-if="ch.sparten.length" class="flex flex-wrap gap-1.5 mt-3">
                 <span v-for="sp in ch.sparten" :key="sp.id"
-                  class="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-gray-100 text-gray-600">
+                  class="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-gray-100 dark:bg-[#1e2130] text-gray-600 dark:text-gray-400">
                   {{ sp.name }}
                 </span>
               </div>
@@ -211,15 +214,15 @@
       <!-- ════════ MODULE COMPONENTS ════════ -->
       <dashboard-view   v-if="mod === 'dashboard' && ctx && ctx.type !== 'user'"  @navigate="mod = $event"></dashboard-view>
       <user-dashboard   v-if="mod === 'dashboard' && ctx && ctx.type === 'user'"  @navigate="mod = $event"></user-dashboard>
-      <events-list      v-if="mod === 'events'"></events-list>
+      <events-list      v-if="mod === 'events'" @back="mod = 'dashboard'"></events-list>
       <pruefe-wizard    v-if="mod === 'pruefe'"      :init-chapter-id="ctx?.chapterId || ''" :init-sparte-id="ctx?.sparteId || ''" @done="mod = 'ctx'"></pruefe-wizard>
       <member-manager   v-if="mod === 'members'"></member-manager>
       <chapter-manager  v-if="mod === 'chapters'"    @navigate="mod = $event"></chapter-manager>
-      <user-admin       v-if="mod === 'useradmin'"></user-admin>
+      <user-admin       v-if="mod === 'useradmin'" @back="mod = 'dashboard'"></user-admin>
       <orga-admin       v-if="mod === 'orga'"></orga-admin>
-      <docs-viewer      v-if="mod === 'dokumente'"></docs-viewer>
-      <user-settings    v-if="mod === 'settings'" @password-changed="mod = 'ctx'"></user-settings>
-      <system-info      v-if="mod === 'sysinfo'" @back="mod = 'ctx'"></system-info>
+      <docs-viewer      v-if="mod === 'dokumente'" @back="mod = 'dashboard'"></docs-viewer>
+      <user-settings    v-if="mod === 'settings'" @back="mod = 'dashboard'" @password-changed="mod = 'dashboard'"></user-settings>
+      <system-info      v-if="mod === 'sysinfo'" @back="mod = 'dashboard'"></system-info>
 
     </main>
   </div>
@@ -227,21 +230,24 @@
 
 <style>
   /* ── Form controls ── */
-  .lbl     { display:block; font-size:12px; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px; }
-  .ctrl    { display:block; width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; color:#1e293b; background:#fff; outline:none; box-sizing:border-box; transition:all .15s ease; }
-  .ctrl:focus { border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.15); }
-  .ctrl:disabled { background:#f8fafc; color:#94a3b8; cursor:not-allowed; }
+  .lbl     { display:block; font-size:11px; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.06em; margin-bottom:5px; }
+  .ctrl    { display:block; width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; color:#0f172a; background:#f8fafc; outline:none; box-sizing:border-box; transition:all .15s ease; font-family:inherit; }
+  .ctrl:focus { border-color:#3b82f6; background:#fff; box-shadow:0 0 0 3px rgba(59,130,246,.12); }
+  .ctrl:disabled { background:#f1f5f9; color:#94a3b8; cursor:not-allowed; }
 
   /* ── Buttons ── */
-  .btn     { background:linear-gradient(180deg,#3b82f6,#2563eb); color:#fff; font-weight:600; padding:9px 20px; border-radius:8px; font-size:13px; cursor:pointer; border:none; transition:all .15s ease; box-shadow:0 1px 2px rgba(37,99,235,.25); }
-  .btn:hover:not(:disabled)  { background:linear-gradient(180deg,#2563eb,#1d4ed8); box-shadow:0 2px 6px rgba(37,99,235,.3); transform:translateY(-0.5px); }
-  .btn:active:not(:disabled) { transform:translateY(0); box-shadow:0 1px 2px rgba(37,99,235,.2); }
+  .btn     { background:#2563eb; color:#fff; font-weight:600; padding:9px 20px; border-radius:8px; font-size:13px; cursor:pointer; border:none; transition:all .14s ease; letter-spacing:.01em; font-family:inherit; }
+  .btn:hover:not(:disabled)  { background:#1d4ed8; box-shadow:0 0 0 3px rgba(37,99,235,.16); }
+  .btn:active:not(:disabled) { transform:scale(0.98); }
   .btn:disabled  { opacity:.45; cursor:not-allowed; }
-  .btn-sm  { background:linear-gradient(180deg,#3b82f6,#2563eb); color:#fff; font-weight:500; padding:6px 14px; border-radius:7px; font-size:12px; cursor:pointer; border:none; transition:all .15s ease; box-shadow:0 1px 2px rgba(37,99,235,.2); }
-  .btn-sm:hover:not(:disabled) { background:linear-gradient(180deg,#2563eb,#1d4ed8); box-shadow:0 2px 4px rgba(37,99,235,.25); }
+  .btn-sm  { background:#2563eb; color:#fff; font-weight:500; padding:6px 14px; border-radius:7px; font-size:12px; cursor:pointer; border:none; transition:all .14s ease; letter-spacing:.01em; font-family:inherit; }
+  .btn-sm:hover:not(:disabled) { background:#1d4ed8; box-shadow:0 0 0 3px rgba(37,99,235,.14); }
+  .btn-sm:active:not(:disabled) { transform:scale(0.98); }
   .btn-sm:disabled { opacity:.45; cursor:not-allowed; }
-  .btn-sec { background:#f8fafc; color:#475569; font-weight:500; padding:6px 14px; border-radius:7px; font-size:12px; cursor:pointer; border:1px solid #e2e8f0; transition:all .15s ease; }
-  .btn-sec:hover { background:#f1f5f9; border-color:#cbd5e1; }
+  .btn-sec { background:#f8fafc; color:#475569; font-weight:500; padding:6px 14px; border-radius:7px; font-size:12px; cursor:pointer; border:1px solid #e2e8f0; transition:all .14s ease; font-family:inherit; }
+  .btn-sec:hover { background:#f1f5f9; border-color:#cbd5e1; color:#334155; }
+  .btn-danger { background:#fee2e2; color:#dc2626; font-weight:500; padding:6px 14px; border-radius:7px; font-size:12px; cursor:pointer; border:1px solid #fecaca; transition:all .14s ease; font-family:inherit; }
+  .btn-danger:hover { background:#fecaca; border-color:#f87171; color:#b91c1c; }
 
   /* ── Table rows ── */
   .mb-row { border-left: 3px solid transparent; transition: all .12s ease; cursor: pointer; }
@@ -302,9 +308,50 @@
   .row-passiv { opacity: 0.5; }
 
   /* ── Back button ── */
-  .btn-back { display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:7px; font-size:12px; font-weight:500; color:#64748b; background:transparent; border:1px solid #e2e8f0; cursor:pointer; transition:all .15s ease; }
-  .btn-back:hover { background:#f8fafc; border-color:#cbd5e1; color:#334155; }
-  .btn-back svg { width:14px; height:14px; }
+  .btn-back { display:inline-flex; align-items:center; gap:5px; padding:5px 11px; border-radius:7px; font-size:12px; font-weight:500; color:#64748b; background:#f8fafc; border:1px solid #e2e8f0; cursor:pointer; transition:all .14s ease; white-space:nowrap; font-family:inherit; }
+  .btn-back:hover { background:#f1f5f9; border-color:#cbd5e1; color:#1e293b; }
+  .btn-back svg { width:13px; height:13px; }
+
+  /* ── Dark mode overrides ── */
+  .dark .lbl     { color:#94a3b8; }
+  .dark .ctrl    { background:#1e2130; border-color:#334155; color:#e2e8f0; }
+  .dark .ctrl:focus { background:#252a3d; border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.15); }
+  .dark .ctrl:disabled { background:#1a1d2e; color:#475569; }
+  .dark .btn-sec { background:#1e293b; color:#94a3b8; border-color:#334155; }
+  .dark .btn-sec:hover { background:#243347; border-color:#3b82f6; color:#e2e8f0; }
+  .dark .btn-back { background:#1e2130; border-color:#334155; color:#94a3b8; }
+  .dark .btn-back:hover { background:#252a3d; border-color:#475569; color:#e2e8f0; }
+  .dark .btn-danger { background:#450a0a; border-color:#7f1d1d; color:#fca5a5; }
+  .dark .btn-danger:hover { background:#7f1d1d; border-color:#ef4444; color:#fecaca; }
+  .dark .mb-row:hover { background:#1a1e2e; }
+  .dark .mb-row-active { border-left-color:#3b82f6; background:#1e3a5f; }
+  .dark .val-ok      { background:#14532d; color:#4ade80; }
+  .dark .val-warn    { background:#713f12; color:#fde68a; }
+  .dark .val-other   { background:#1e3a5f; color:#93c5fd; }
+  .dark .val-blocked { background:#450a0a; color:#fca5a5; }
+  .dark .val-none    { background:#1e2130; color:#64748b; }
+  .dark .val-active  { background:#14532d; color:#4ade80; }
+  .dark .val-inactive{ background:#1e2130; color:#64748b; }
+  .dark .step-pending { background:#334155; color:#94a3b8; }
+  .dark .step-pending:hover { background:#475569; }
+  .dark .step-label-current { color:#60a5fa; }
+  .dark .step-label-default { color:#475569; }
+  .dark .step-label-default:hover { color:#94a3b8; }
+  .dark .drop-active { border-color:#3b82f6; background:#1e3a5f; }
+  .dark .drop-idle   { border-color:#334155; background:#1e2130; }
+  .dark .drop-idle:hover { background:#252a3d; border-color:#475569; }
+  .dark .pick-disabled { background:#1a1d27; }
+  .dark .pick-highlight { background:#1e3a5f; }
+  .dark .pick-highlight-green { background:#14532d; }
+  .dark .sparte-active { background:#1e2d62; border-color:#4f6dc5; }
+  .dark .sparte-idle  { background:#1e2130; border-color:#252a3d; }
+  .dark .sparte-idle:hover { background:#1e2d4a; border-color:#3b5cb8; }
+  .dark .row-warn  { background:#2a1f00; }
+  .dark .row-error { background:#380a0a; }
+  .dark .status-offen       { background:#2a1f00; color:#fbbf24; }
+  .dark .status-freigegeben { background:#14532d; color:#4ade80; }
+  .dark .status-abgelehnt   { background:#450a0a; color:#fca5a5; }
+  .dark .status-default     { background:#1e2130; color:#94a3b8; }
 </style>
 
 <!-- Vendor -->
@@ -334,7 +381,7 @@ const { createApp, ref, reactive, computed, watch, onMounted, provide, nextTick 
 const app = createApp({
   setup() {
     // ── Auth guard ──
-    const token = MCM_STORE.get('token');
+    let token = MCM_STORE.get('token');
     if (!token) { window.location.href = '/login.html?redirect=' + encodeURIComponent(window.location.pathname + window.location.search + window.location.hash); return {}; }
 
     const user = ref(JSON.parse(MCM_STORE.get('user') || '{}'));
@@ -344,9 +391,47 @@ const app = createApp({
     const ctx = ref(null);
     const userMenu = ref(false);
     const appVersion = ref('');
+
+    // ── Silent token refresh ──
+    // Decodes JWT exp (no library needed) and schedules a refresh 10 min before expiry.
+    let _refreshTimer = null;
+    function scheduleRefresh(jwt) {
+      clearTimeout(_refreshTimer);
+      try {
+        const payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        if (!payload.exp) return;
+        const msUntilExpiry = payload.exp * 1000 - Date.now();
+        const refreshIn = Math.max(msUntilExpiry - 10 * 60 * 1000, 30_000); // 10 min early, min 30 s
+        _refreshTimer = setTimeout(async () => {
+          try {
+            const r = await fetch('/api/auth/refresh', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            });
+            if (!r.ok) { MCM_STORE.logout(); window.location.href = '/login.html'; return; }
+            const data = await r.json();
+            token = data.token;
+            MCM_STORE.set('token', token);
+            MCM_STORE.set('user', JSON.stringify({ kuerzel: data.kuerzel, name: data.name, vorname: data.vorname, roles: data.roles, orgaAdmin: data.orgaAdmin, zeitstelle: data.zeitstelle }));
+            user.value = { kuerzel: data.kuerzel, name: data.name, vorname: data.vorname, roles: data.roles, orgaAdmin: data.orgaAdmin || false, zeitstelle: data.zeitstelle || false };
+            scheduleRefresh(token);
+          } catch { /* network error — will retry on next request returning 401 */ }
+        }, refreshIn);
+      } catch { /* malformed token — ignore */ }
+    }
+    scheduleRefresh(token);
+
     fetch('/api/status').then(r => r.json()).then(d => {
       if (d.version) appVersion.value = d.version;
     }).catch(() => {});
+
+    // ── Dark mode ──
+    const darkMode = ref(document.documentElement.classList.contains('dark'));
+    function toggleDark() {
+      darkMode.value = !darkMode.value;
+      document.documentElement.classList.toggle('dark', darkMode.value);
+      localStorage.setItem('mcm-dark', darkMode.value ? 'true' : 'false');
+    }
 
     // ── Path-based routing ──
     function ctxPath(opt) {
@@ -361,7 +446,7 @@ const app = createApp({
     // ── Role helpers ──
     const isOrgaAdmin = computed(() => !!user.value.orgaAdmin);
     const isZeitstelle = computed(() => !!user.value.zeitstelle);
-    const isSuperadminAnywhere = computed(() => {
+    const isChapterAdminAnywhere = computed(() => {
       if (isOrgaAdmin.value) return true;
       return Object.values(user.value.roles || {}).some(r => r.level === ROLE_LEVEL.CHAPTER);
     });
@@ -385,7 +470,7 @@ const app = createApp({
       }
       if (!m.need) return true;
       if (m.need === 'chapter')  return hasAnyChapterRole.value || isOrgaAdmin.value || isZeitstelle.value;
-      if (m.need === 'super')    return isSuperadminAnywhere.value;
+      if (m.need === 'super')    return isChapterAdminAnywhere.value;
       if (m.need === 'orga')     return isOrgaAdmin.value;
       if (m.need === 'zeit')     return isZeitstelle.value || isOrgaAdmin.value;
       return true;
@@ -395,29 +480,46 @@ const app = createApp({
     // Per-context module tabs
     const ctxModules = computed(() => {
       if (!ctx.value) return [];
-      const type = ctx.value.type;
-      const dash = { id:'dashboard', icon:'📊', label:'Dashboard' };
-      if (type === 'orgadmin')     return [dash, { id:'chapters', icon:'🏢', label:'Chapter' }, { id:'useradmin', icon:'👥', label:'Benutzer' }];
-      if (type === 'chapteradmin') return [dash, { id:'chapters', icon:'🏢', label:'Mein Chapter' }];
-      if (type === 'spartenadmin') return [dash, { id:'pruefe', icon:'⏱', label:'Zeitkorrektur prüfen' }];
-      if (type === 'zeitstelle')   return [dash, { id:'dokumente', icon:'📂', label:'Dokumente' }, { id:'events', icon:'📅', label:'Veranstaltungen' }];
-      if (type === 'user')         return [dash, { id:'settings', icon:'⚙️', label:'Einstellungen' }];
-      return [dash];
+      // No nav tabs — dashboard tiles handle all navigation
+      return [];
     });
 
-    // Guard: if current mod not allowed in ctx, jump to first allowed
+    // Guard: if current mod not allowed in ctx, jump to dashboard
     watch([ctx, ctxModules], () => {
-      if (!ctx.value || !ctxModules.value.length) return;
-      if (mod.value === 'ctx' || mod.value === 'settings') return;
-      if (!ctxModules.value.some(m => m.id === mod.value)) {
-        mod.value = ctxModules.value[0].id;
-      }
+      if (!ctx.value) return;
+      // Let any module through — dashboard tiles navigate freely
     });
 
     // ── API helpers ──
-    const api = (url, opts = {}) => fetch(url, { ...opts, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(opts.headers || {}) } });
+    const api = (url, opts = {}) => fetch(url, { ...opts, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(opts.headers || {}) } })
+      .then(res => {
+        if (res.status === 401) { MCM_STORE.logout(); window.location.href = '/login.html'; }
+        return res;
+      });
     const apiPost = (url, body) => api(url, { method: 'POST', body: JSON.stringify(body) });
-    const apiPut = (url, body) => api(url, { method: 'PUT', body: JSON.stringify(body) });
+    const apiPut  = (url, body) => api(url, { method: 'PUT',  body: JSON.stringify(body) });
+
+    // ── Navigation helpers (exposed to templates — window is not accessible there) ──
+    function goHome() { mod.value = 'ctx'; ctx.value = null; window.history.pushState(null, '', '/app'); }
+
+    // ── Greeting & pending count ──
+    const greetingText = computed(() => {
+      const h = new Date().getHours();
+      if (h < 5)  return 'Guten Morgen';
+      if (h < 12) return 'Guten Morgen';
+      if (h < 18) return 'Guten Tag';
+      return 'Guten Abend';
+    });
+    const greetingDate = computed(() => new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
+    const pendingCount = ref(0);
+    async function loadPendingCount() {
+      if (!isOrgaAdmin.value && !isZeitstelle.value && !isChapterAdminAnywhere.value) return;
+      try {
+        const r = await api('/api/events?status=offen');
+        const evs = await r.json();
+        pendingCount.value = Array.isArray(evs) ? evs.length : 0;
+      } catch {}
+    }
 
     // ── Git sync status ──
     const syncing = ref(false);
@@ -555,7 +657,7 @@ const app = createApp({
     provide('isActive', isActive);
     provide('isOrgaAdmin', isOrgaAdmin);
     provide('isZeitstelle', isZeitstelle);
-    provide('isSuperadminAnywhere', isSuperadminAnywhere);
+    provide('isChapterAdminAnywhere', isChapterAdminAnywhere);
     provide('hasAnyChapterRole', hasAnyChapterRole);
     provide('chapterDirectory', chapterDirectory);
     provide('userNameCache', userNameCache);
@@ -565,6 +667,8 @@ const app = createApp({
     provide('uPickKeydown', uPickKeydown);
     provide('serverOnline', serverOnline);
     provide('sseEvent', sseEvent);
+    provide('darkMode', darkMode);
+    provide('toggleDark', toggleDark);
 
     // ── Module switching: load shared data ──
     watch(mod, (m) => {
@@ -577,31 +681,27 @@ const app = createApp({
       const opts = [];
       const roles = user.value.roles || {};
       if (isOrgaAdmin.value)
-        opts.push({ type: 'orgadmin', label: 'Organisations-Admin', detail: null, icon: '🏛', desc: 'Chapters, Mitglieder, Anfragen und Organisation verwalten', color: 'rose' });
+        opts.push({ type: 'orgadmin', label: 'Meine Organisation', role: 'Organisations-Admin', detail: null, icon: '🏛', desc: 'Chapters, Benutzer, Anfragen und Organisation verwalten', color: 'rose' });
       if (isZeitstelle.value)
-        opts.push({ type: 'zeitstelle', label: 'Zeitstelle', detail: null, icon: '⏱', desc: 'Freigabelisten und Dokumente verwalten', color: 'amber' });
+        opts.push({ type: 'zeitstelle', label: 'Freigaben & Dokumente', role: 'Zeitstelle', detail: null, icon: '⏱', desc: 'Freigabelisten prüfen und Dokumente verwalten', color: 'amber' });
       for (const [cid, role] of Object.entries(roles)) {
         if (role.level === ROLE_LEVEL.CHAPTER) {
-          opts.push({ type: 'chapteradmin', chapterId: cid, label: 'Chapter-Admin', detail: i18n.chapter(cid), icon: '🏢', desc: 'Mitglieder verwalten, Eintritt und Austritt erfassen', color: 'purple' });
+          opts.push({ type: 'chapteradmin', chapterId: cid, label: i18n.chapter(cid), role: 'Chapter-Admin', detail: null, icon: '🏢', desc: 'Mitglieder verwalten, Eintritt und Austritt erfassen', color: 'purple' });
           for (const sp of (role.sparten || []))
-            opts.push({ type: 'spartenadmin', chapterId: cid, sparteId: sp, label: 'Zeitkorrektur prüfen', detail: `${i18n.sparte(sp)} · ${i18n.chapter(cid)}`, icon: '⏱', desc: 'Freigabeliste erstellen und Zeitkorrektur einreichen', color: 'teal' });
+            opts.push({ type: 'spartenadmin', chapterId: cid, sparteId: sp, label: i18n.sparte(sp), role: 'Spartenadmin', detail: i18n.chapter(cid), icon: '🏓', desc: 'Sparte verwalten, Freigabeliste und Zeitkorrektur', color: 'teal' });
         } else if (role.level === ROLE_LEVEL.SPARTE) {
           for (const sp of (role.sparten || []))
-            opts.push({ type: 'spartenadmin', chapterId: cid, sparteId: sp, label: 'Spartenadmin', detail: `${i18n.sparte(sp)} · ${i18n.chapter(cid)}`, icon: '🏓', desc: 'Veranstaltungen prüfen und einreichen', color: 'blue' });
+            opts.push({ type: 'spartenadmin', chapterId: cid, sparteId: sp, label: i18n.sparte(sp), role: 'Spartenadmin', detail: i18n.chapter(cid), icon: '🏓', desc: 'Sparte verwalten, Freigabeliste und Zeitkorrektur', color: 'blue' });
         }
       }
       // User tile — always shown for every user
-      opts.push({ type: 'user', label: 'Mein Bereich', detail: null, icon: '👤', desc: 'Persönliches Dashboard, Mitgliedschaften und Einstellungen', color: 'gray' });
+      opts.push({ type: 'user', label: 'Mein Bereich', role: null, detail: null, icon: '👤', desc: 'Persönliches Dashboard, Mitgliedschaften und Einstellungen', color: 'gray' });
       return opts;
     });
 
     function selectCtx(opt, skipPush) {
       ctx.value = opt;
-      if (opt.type === 'orgadmin')        mod.value = 'chapters';
-      else if (opt.type === 'chapteradmin') mod.value = 'chapters';
-      else if (opt.type === 'spartenadmin') mod.value = 'pruefe';
-      else if (opt.type === 'zeitstelle')   mod.value = 'dokumente';
-      else                                  mod.value = 'dashboard';
+      mod.value = 'dashboard';
       if (!skipPush) window.history.pushState(null, '', ctxPath(opt));
     }
 
@@ -633,16 +733,19 @@ const app = createApp({
       }
     });
 
-    onMounted(() => { loadChapters(); loadOrg(); loadDirectory(); });
+    onMounted(() => { loadChapters(); loadOrg(); loadDirectory(); loadPendingCount(); });
 
     return {
       user, i18n, mod, visibleModules, currentModule,
-      isOrgaAdmin, isZeitstelle, isSuperadminAnywhere, hasAnyChapterRole,
+      isOrgaAdmin, isZeitstelle, isChapterAdminAnywhere, hasAnyChapterRole,
       logout, statusCls, userMenu,
       ctx, ctxOptions, selectCtx, ctxPath, ctxModules,
       syncing, syncStatus, triggerSync,
-      chapterDirectory, serverOnline,
+      chapterDirectory, serverOnline, appVersion,
+      darkMode, toggleDark, goHome,
+      greetingText, greetingDate, pendingCount,
       branding: window.APP_BRANDING || {},
+      ctxColor: (c) => ({ rose:'#f43f5e', amber:'#f59e0b', purple:'#9333ea', teal:'#0d9488', blue:'#3b82f6', gray:'#94a3b8' })[c] || '#3b82f6',
     };
   }
 });

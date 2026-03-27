@@ -1,9 +1,9 @@
-﻿# MCM Sportstunden-Freigabe â€“ Requirements
+# MCM Sportstunden-Freigabe – Requirements
 
-## Ãœberblick
+## Überblick
 
-Web-Anwendung zur Freigabe von Sportstunden durch Ãœbungsleiter.  
-Sportstundenleiter erfassen Sport-Events, die durch berechtigte Personen freigegeben werden mÃ¼ssen.
+Web-Anwendung zur Freigabe von Sportstunden durch Übungsleiter.  
+Sportstundenleiter erfassen Sport-Events, die durch berechtigte Personen freigegeben werden müssen.
 
 **Tech-Stack:** Vue 3 + Tailwind CSS 4 (Frontend), Node.js 20 + Express (Backend), Git als Datenbank (JSON-Dateien).
 
@@ -33,7 +33,7 @@ Pro Chapter eine Datei, z. B. `chapter-nsk.json`, `chapter-wsv.json`.
 {
   "id": "nsk",
   "name": "NSK Nordstadt",
-  "superadmins": ["s96", "ddd"],
+  "admins": ["s96", "ddd"],
   "spartenadmins": {
     "tischtennis": ["s888", "b333"],
     "fussball": ["f01"]
@@ -46,9 +46,9 @@ Pro Chapter eine Datei, z. B. `chapter-nsk.json`, `chapter-wsv.json`.
 |-----------------|----------------------------|--------------------------------------------------------|
 | `id`            | string                     | Eindeutige Chapter-Kennung                             |
 | `name`          | string                     | Anzeigename                                            |
-| `superadmins`   | string[]                  | KÃ¼rzel der User mit vollen Admin-Rechten im Chapter    |
-| `spartenadmins` | map<string, string[]>     | Sparte â†’ Liste der KÃ¼rzel mit Admin-Rechten pro Sparte |
-| `sparten`       | string[]                   | VerfÃ¼gbare Sparten im Chapter                          |
+| `admins`        | string[]                  | K�rzel der User mit vollen Admin-Rechten im Chapter    |
+| `spartenadmins` | map<string, string[]>     | Sparte ? Liste der K�rzel mit Admin-Rechten pro Sparte |
+| `sparten`       | string[]                   | Verf�gbare Sparten im Chapter                          |
 
 ### 1.3 `user-{kuerzel}.json`
 
@@ -57,7 +57,7 @@ Pro Benutzer eine Datei, z. B. `user-s888.json`.
 ```json
 {
   "kuerzel": "s888",
-  "name": "MÃ¼ller",
+  "name": "Müller",
   "vorname": "Peter",
   "chapters": [
     {
@@ -76,10 +76,10 @@ Pro Benutzer eine Datei, z. B. `user-s888.json`.
 
 | Feld       | Typ              | Beschreibung                                  |
 |------------|------------------|-----------------------------------------------|
-| `kuerzel`  | string           | Eindeutiges KÃ¼rzel (= Login-ID)               |
+| `kuerzel`  | string           | Eindeutiges Kürzel (= Login-ID)               |
 | `name`     | string           | Nachname                                       |
 | `vorname`  | string           | Vorname                                        |
-| `chapters` | ChapterMember[]  | Chapter-ZugehÃ¶rigkeiten mit Beitrittsdatum     |
+| `chapters` | ChapterMember[]  | Chapter-Zugehörigkeiten mit Beitrittsdatum     |
 
 **ChapterMember:**
 
@@ -88,7 +88,7 @@ Pro Benutzer eine Datei, z. B. `user-s888.json`.
 | `chapterId` | string | Referenz auf Chapter-ID             |
 | `beitritt`  | date   | Beitrittsdatum                      |
 | `sparte`    | string | Sparte im Chapter                   |
-| `status`    | enum   | `aktiv` Â· `passiv` (Mitgliedsstatus)|
+| `status`    | enum   | `aktiv` · `passiv` (Mitgliedsstatus)|
 
 ### 1.4 `sportevent-{id}.json`
 
@@ -102,8 +102,8 @@ Pro Sportstunde/Event eine Datei, z. B. `sportevent-2026-03-14-tt-001.json`.
   "datum": "2026-03-14",
   "von": "18:00",
   "bis": "20:00",
-  "ort": "Turnhalle SÃ¼d",
-  "beschreibung": "RegulÃ¤res Tischtennis-Training",
+  "ort": "Turnhalle Süd",
+  "beschreibung": "Reguläres Tischtennis-Training",
   "teilnehmer": ["s888", "b333", "x42"],
   "erstelltVon": "s888",
   "erstelltAm": "2026-03-10T14:30:00",
@@ -128,17 +128,17 @@ Pro Sportstunde/Event eine Datei, z. B. `sportevent-2026-03-14-tt-001.json`.
 | `bis`          | time         | Endzeit                                               |
 | `ort`          | string       | Veranstaltungsort                                     |
 | `beschreibung` | string       | Freitext-Beschreibung                                 |
-| `teilnehmer`   | string[]    | KÃ¼rzel der teilnehmenden Personen                     |
-| `erstelltVon`  | string       | KÃ¼rzel des Erstellers                                 |
+| `teilnehmer`   | string[]    | Kürzel der teilnehmenden Personen                     |
+| `erstelltVon`  | string       | Kürzel des Erstellers                                 |
 | `erstelltAm`   | datetime    | Erstellungszeitpunkt                                  |
-| `status`       | enum         | `offen` Â· `freigegeben` Â· `abgelehnt`                |
+| `status`       | enum         | `offen` · `freigegeben` · `abgelehnt`                |
 | `freigaben`    | Freigabe[]   | Liste der erteilten Freigaben                         |
 
 **Freigabe:**
 
 | Feld       | Typ      | Beschreibung                    |
 |------------|----------|---------------------------------|
-| `von`      | string   | KÃ¼rzel des Freigebenden         |
+| `von`      | string   | Kürzel des Freigebenden         |
 | `am`       | datetime | Zeitpunkt der Freigabe          |
 | `kommentar`| string   | Optionaler Kommentar            |
 
@@ -146,20 +146,20 @@ Pro Sportstunde/Event eine Datei, z. B. `sportevent-2026-03-14-tt-001.json`.
 
 ```
 data/
-â”œâ”€â”€ organisation.json
-â”œâ”€â”€ chapters/
-â”‚   â”œâ”€â”€ chapter-nsk.json
-â”‚   â””â”€â”€ chapter-wsv.json
-â”œâ”€â”€ users/
-â”‚   â”œâ”€â”€ user-s888.json
-â”‚   â”œâ”€â”€ user-b333.json
-â”‚   â””â”€â”€ user-s96.json
-â””â”€â”€ events/
-    â”œâ”€â”€ sportevent-2026-03-14-tt-001.json
-    â””â”€â”€ sportevent-2026-03-15-fb-001.json
+├── organisation.json
+├── chapters/
+│   ├── chapter-nsk.json
+│   └── chapter-wsv.json
+├── users/
+│   ├── user-s888.json
+│   ├── user-b333.json
+│   └── user-s96.json
+└── events/
+    ├── sportevent-2026-03-14-tt-001.json
+    └── sportevent-2026-03-15-fb-001.json
 ```
 
-Jede Ã„nderung wird als Git-Commit gespeichert â†’ volle Historie, kein externer DB-Server nÃ¶tig.
+Jede Änderung wird als Git-Commit gespeichert → volle Historie, kein externer DB-Server nötig.
 
 ---
 
@@ -169,15 +169,15 @@ Jede Ã„nderung wird als Git-Commit gespeichert â†’ volle Historie, kein 
 
 | Rolle           | Quelle                         | Rechte                                                   |
 |-----------------|--------------------------------|----------------------------------------------------------|
-| **Superadmin**  | `chapter-{id}.json#superadmins`| Alles im Chapter: User verwalten, alle Events sehen/freigeben, Spartenadmins verwalten |
+| **Chapter-Admin** | `chapter-{id}.json#admins`| Alles im Chapter: User verwalten, alle Events sehen/freigeben, Spartenadmins verwalten |
 | **Spartenadmin**| `chapter-{id}.json#spartenadmins` | Events der eigenen Sparte erstellen, bearbeiten, freigeben; Teilnehmer verwalten |
 | **User**        | `user-{kuerzel}.json`          | Eigene Events sehen, an Events teilnehmen                |
 
 ### 2.2 Authentifizierung
 
-- Login mit **KÃ¼rzel + Passwort** (Passwort-Hash in `credentials.json`).
+- Login mit **Kürzel + Passwort** (Passwort-Hash in `credentials.json`).
 - JWT-basiert (stateless, Bearer-Token im Authorization-Header).
-- Kein Ã¶ffentlicher Zugang â€“ alle Seiten erfordern Login.
+- Kein öffentlicher Zugang – alle Seiten erfordern Login.
 
 ---
 
@@ -189,7 +189,7 @@ Jede Ã„nderung wird als Git-Commit gespeichert â†’ volle Historie, kein 
 |---|---|
 | **Akteur** | Alle Benutzer |
 | **Vorbedingung** | User existiert in `user-{kuerzel}.json` |
-| **Ablauf** | 1. User gibt KÃ¼rzel + Passwort ein. 2. System prÃ¼ft Credentials. 3. Bei Erfolg: Redirect zum Dashboard. Bei Fehler: Fehlermeldung. |
+| **Ablauf** | 1. User gibt Kürzel + Passwort ein. 2. System prüft Credentials. 3. Bei Erfolg: Redirect zum Dashboard. Bei Fehler: Fehlermeldung. |
 | **Ergebnis** | Benutzer ist angemeldet, Session aktiv. |
 
 ### UC-02: Dashboard anzeigen
@@ -197,42 +197,42 @@ Jede Ã„nderung wird als Git-Commit gespeichert â†’ volle Historie, kein 
 | | |
 |---|---|
 | **Akteur** | Angemeldeter Benutzer |
-| **Ablauf** | 1. System zeigt offene Events des Chapters/der Sparte. 2. Spartenadmin/Superadmin sieht zusÃ¤tzlich offene Freigabeanfragen. |
-| **Ergebnis** | Ãœbersicht der relevanten Sportstunden. |
+| **Ablauf** | 1. System zeigt offene Events des Chapters/der Sparte. 2. Spartenadmin/Chapter-Admin sieht zusätzlich offene Freigabeanfragen. |
+| **Ergebnis** | Übersicht der relevanten Sportstunden. |
 
 ### UC-03: Sportevent erstellen
 
 | | |
 |---|---|
-| **Akteur** | Spartenadmin, Superadmin |
-| **Vorbedingung** | User ist Spartenadmin fÃ¼r die Sparte oder Superadmin im Chapter. |
-| **Ablauf** | 1. User wÃ¤hlt Chapter + Sparte. 2. Gibt Datum, Uhrzeit, Ort, Beschreibung ein. 3. WÃ¤hlt Teilnehmer aus der Sparte. 4. Speichert â†’ neue `sportevent-{id}.json` wird als Git-Commit angelegt. |
+| **Akteur** | Spartenadmin, Chapter-Admin |
+| **Vorbedingung** | User ist Spartenadmin für die Sparte oder Chapter-Admin im Chapter. |
+| **Ablauf** | 1. User wählt Chapter + Sparte. 2. Gibt Datum, Uhrzeit, Ort, Beschreibung ein. 3. Wählt Teilnehmer aus der Sparte. 4. Speichert → neue `sportevent-{id}.json` wird als Git-Commit angelegt. |
 | **Ergebnis** | Neues Event mit Status `offen`. |
 
 ### UC-04: Sportevent freigeben
 
 | | |
 |---|---|
-| **Akteur** | Spartenadmin, Superadmin |
+| **Akteur** | Spartenadmin, Chapter-Admin |
 | **Vorbedingung** | Event hat Status `offen`. User hat Freigabe-Berechtigung. |
-| **Ablauf** | 1. User sieht offene Events. 2. Klickt "Freigeben" oder "Ablehnen". 3. Optional: Kommentar. 4. Status Ã¤ndert sich zu `freigegeben` / `abgelehnt`. 5. Ã„nderung wird als Git-Commit gespeichert. |
+| **Ablauf** | 1. User sieht offene Events. 2. Klickt "Freigeben" oder "Ablehnen". 3. Optional: Kommentar. 4. Status ändert sich zu `freigegeben` / `abgelehnt`. 5. Änderung wird als Git-Commit gespeichert. |
 | **Ergebnis** | Event ist freigegeben oder abgelehnt, Freigabe-Eintrag gespeichert. |
 
 ### UC-05: Sportevent bearbeiten
 
 | | |
 |---|---|
-| **Akteur** | Spartenadmin (eigene Sparte), Superadmin |
+| **Akteur** | Spartenadmin (eigene Sparte), Chapter-Admin |
 | **Vorbedingung** | Event existiert, Status ist `offen`. |
-| **Ablauf** | 1. User Ã¶ffnet Event. 2. Ã„ndert Daten (Datum, Zeit, Ort, Teilnehmer). 3. Speichert â†’ Git-Commit. |
+| **Ablauf** | 1. User öffnet Event. 2. Ändert Daten (Datum, Zeit, Ort, Teilnehmer). 3. Speichert → Git-Commit. |
 | **Ergebnis** | Event aktualisiert. |
 
-### UC-06: Teilnehmer zu Event hinzufÃ¼gen/entfernen
+### UC-06: Teilnehmer zu Event hinzufügen/entfernen
 
 | | |
 |---|---|
-| **Akteur** | Spartenadmin, Superadmin |
-| **Ablauf** | 1. Event Ã¶ffnen. 2. User aus Sparte hinzufÃ¼gen oder entfernen. 3. Speichern. |
+| **Akteur** | Spartenadmin, Chapter-Admin |
+| **Ablauf** | 1. Event öffnen. 2. User aus Sparte hinzufügen oder entfernen. 3. Speichern. |
 | **Ergebnis** | Teilnehmerliste aktualisiert. |
 
 ### UC-07: Events auflisten & filtern
@@ -240,22 +240,22 @@ Jede Ã„nderung wird als Git-Commit gespeichert â†’ volle Historie, kein 
 | | |
 |---|---|
 | **Akteur** | Alle angemeldeten Benutzer |
-| **Ablauf** | 1. Eventliste nach Chapter, Sparte, Datum, Status filtern. 2. User sieht nur Events seines Chapters / seiner Sparte (oder alle bei Superadmin). |
+| **Ablauf** | 1. Eventliste nach Chapter, Sparte, Datum, Status filtern. 2. User sieht nur Events seines Chapters / seiner Sparte (oder alle bei Chapter-Admin). |
 | **Ergebnis** | Gefilterte Eventliste. |
 
-### UC-08: User verwalten (Superadmin)
+### UC-08: User verwalten (Chapter-Admin)
 
 | | |
 |---|---|
-| **Akteur** | Superadmin |
-| **Ablauf** | 1. Neuen User anlegen (`user-{kuerzel}.json`). 2. User zu Chapter/Sparte zuordnen. 3. Passwort setzen/zurÃ¼cksetzen. 4. User deaktivieren. |
-| **Ergebnis** | User angelegt/geÃ¤ndert, Git-Commit. |
+| **Akteur** | Chapter-Admin |
+| **Ablauf** | 1. Neuen User anlegen (`user-{kuerzel}.json`). 2. User zu Chapter/Sparte zuordnen. 3. Passwort setzen/zurücksetzen. 4. User deaktivieren. |
+| **Ergebnis** | User angelegt/geändert, Git-Commit. |
 
-### UC-09: Spartenadmin verwalten (Superadmin)
+### UC-09: Spartenadmin verwalten (Chapter-Admin)
 
 | | |
 |---|---|
-| **Akteur** | Superadmin |
+| **Akteur** | Chapter-Admin |
 | **Ablauf** | 1. User als Spartenadmin einer Sparte zuweisen oder entfernen. 2. Update in `chapter-{id}.json`. |
 | **Ergebnis** | Berechtigungen aktualisiert. |
 
@@ -263,9 +263,9 @@ Jede Ã„nderung wird als Git-Commit gespeichert â†’ volle Historie, kein 
 
 | | |
 |---|---|
-| **Akteur** | Spartenadmin, Superadmin |
-| **Ablauf** | 1. Event auswÃ¤hlen. 2. Git-Log fÃ¼r die Event-Datei anzeigen. 3. Alle Ã„nderungen + Freigaben chronologisch sichtbar. |
-| **Ergebnis** | VollstÃ¤ndige Ã„nderungshistorie aus Git. |
+| **Akteur** | Spartenadmin, Chapter-Admin |
+| **Ablauf** | 1. Event auswählen. 2. Git-Log für die Event-Datei anzeigen. 3. Alle Änderungen + Freigaben chronologisch sichtbar. |
+| **Ergebnis** | Vollständige Änderungshistorie aus Git. |
 
 ### UC-11: Logout
 
@@ -281,10 +281,10 @@ Jede Ã„nderung wird als Git-Commit gespeichert â†’ volle Historie, kein 
 
 | # | Anforderung |
 |---|---|
-| NF-01 | **Git als Datenbank** â€“ kein externer DB-Server, alle Daten als JSON in Git. |
-| NF-02 | **Revisionssicherheit** â€“ jede Ã„nderung ist ein Git-Commit mit Autor + Timestamp. |
-| NF-03 | **Node.js 20** â€“ Express Backend, kein separater DB-Server. |
-| NF-04 | **Vue 3 + Tailwind CSS 4** â€“ SPA-Frontend, vollstÃ¤ndig offline-fÃ¤hig (Vendor-Assets lokal). |
-| NF-05 | **Authentifizierung erforderlich** â€“ keine Seite ohne Login erreichbar. |
-| NF-06 | **Multi-Chapter-fÃ¤hig** â€“ das System muss mehrere Chapters unterstÃ¼tzen. |
+| NF-01 | **Git als Datenbank** – kein externer DB-Server, alle Daten als JSON in Git. |
+| NF-02 | **Revisionssicherheit** – jede Änderung ist ein Git-Commit mit Autor + Timestamp. |
+| NF-03 | **Node.js 20** – Express Backend, kein separater DB-Server. |
+| NF-04 | **Vue 3 + Tailwind CSS 4** – SPA-Frontend, vollständig offline-fähig (Vendor-Assets lokal). |
+| NF-05 | **Authentifizierung erforderlich** – keine Seite ohne Login erreichbar. |
+| NF-06 | **Multi-Chapter-fähig** – das System muss mehrere Chapters unterstützen. |
 

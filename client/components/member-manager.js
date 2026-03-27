@@ -1,11 +1,11 @@
 /**
  * <member-manager> — Master-detail member management
  *
- * Inject: api, apiPost, apiPut, i18n, user, prChapters, isOrgaAdmin, isSuperadminAnywhere, hasAnyChapterRole, isActive
+ * Inject: api, apiPost, apiPut, i18n, user, prChapters, isOrgaAdmin, isChapterAdminAnywhere, hasAnyChapterRole, isActive
  */
 const MemberManager = {
   name: 'MemberManager',
-  inject: ['api', 'apiPost', 'apiPut', 'i18n', 'user', 'prChapters', 'isOrgaAdmin', 'isSuperadminAnywhere', 'hasAnyChapterRole', 'isActive', 'sseEvent'],
+  inject: ['api', 'apiPost', 'apiPut', 'i18n', 'user', 'prChapters', 'isOrgaAdmin', 'isChapterAdminAnywhere', 'hasAnyChapterRole', 'isActive', 'sseEvent'],
   data() {
     return {
       members: [],
@@ -17,7 +17,7 @@ const MemberManager = {
       edit: null,
       error: '',
       chapterError: '',
-      // Pool search (find users not yet in the current chapter)
+      resetPwMsg: '',
       poolQuery: '',
       poolResults: [],
       poolTimer: null,
@@ -36,6 +36,13 @@ const MemberManager = {
     },
     filtered() {
       let list = this.members;
+      // 'ohne Chapter' filter: users with no chapter memberships
+      if (this.chapter === 'none') {
+        list = list.filter(u => !(u.chapters||[]).length);
+        const q = this.filter.toLowerCase();
+        if (!q) return list;
+        return list.filter(u => u.name.toLowerCase().includes(q) || u.vorname.toLowerCase().includes(q) || u.kuerzel.toLowerCase().includes(q));
+      }
       // Non-orgAdmin: only show members who belong to the scoped chapter
       if (!this.isOrgaAdmin && this.chapter) {
         list = list.filter(u => (u.chapters||[]).some(c => c.chapterId === this.chapter));
@@ -117,7 +124,13 @@ const MemberManager = {
         this.selected = null; this.load();
       } catch (e) { this.error = e.message; }
     },
-    async resetPw(k) { await this.apiPost(`/api/admin/users/${k}/reset-password`); alert(`Passwort für ${k} zurückgesetzt (Initial: Kürzel).`); },
+    async resetPw(k) {
+      try {
+        await this.apiPost(`/api/admin/users/${k}/reset-password`);
+        this.resetPwMsg = `Passwort für ${k} zurückgesetzt. Initial-Passwort = Kürzel.`;
+        setTimeout(() => { this.resetPwMsg = ''; }, 4000);
+      } catch(e) { this.error = e.message; }
+    },
     // Pool search: find any user in the org by kürzel/name (for adding to chapter)
     poolSearch() {
       clearTimeout(this.poolTimer);
@@ -168,8 +181,9 @@ const MemberManager = {
           <select v-model="chapter" @change="sparte = ''; load()" class="ctrl text-xs">
             <option value="">Alle Chapter</option>
             <option v-for="ch in prChapters" :key="ch.id" :value="ch.id">{{ i18n.chapter(ch.id) }}</option>
+            <option value="none">– Ohne Chapter</option>
           </select>
-          <select v-if="spartenInChapter.length" v-model="sparte" class="ctrl text-xs">
+          <select v-if="spartenInChapter.length && chapter !== 'none'" v-model="sparte" class="ctrl text-xs">
             <option value="">Alle Sparten</option>
             <option v-for="sp in spartenInChapter" :key="sp.id" :value="sp.id">{{ sp.name || sp.id }}</option>
           </select>
@@ -233,10 +247,11 @@ const MemberManager = {
                 <div v-for="k in selected.kontakte" :key="k.typ + k.wert">{{ k.typ }}: {{ k.wert }}</div>
               </div>
             </div>
-            <div v-if="isSuperadminAnywhere" class="flex gap-2">
+            <div v-if="isChapterAdminAnywhere" class="flex flex-wrap gap-2 items-center">
               <button @click="startEdit(selected)" class="btn-sm text-xs">✏ Stammdaten</button>
-              <button @click="resetPw(selected.kuerzel)" class="btn-sec text-xs">PW Reset</button>
-              <button @click="deleteUser(selected.kuerzel)" class="text-red-500 hover:text-red-700 text-xs px-2 py-1 rounded hover:bg-red-50">🗑 Löschen</button>
+              <button @click="resetPw(selected.kuerzel)" class="btn-sec text-xs">🔑 PW zurücksetzen</button>
+              <button @click="deleteUser(selected.kuerzel)" class="btn-danger text-xs">🗑 Löschen</button>
+              <span v-if="resetPwMsg" class="text-xs text-green-700 bg-green-50 border border-green-200 px-2 py-1 rounded-lg">✓ {{ resetPwMsg }}</span>
             </div>
           </div>
           <div v-if="edit" class="mt-4 pt-4 border-t border-gray-100">
@@ -246,14 +261,16 @@ const MemberManager = {
             </div>
             <div class="mb-3">
               <label class="lbl">Kontakte</label>
-              <div v-for="(k, idx) in edit.kontakte" :key="idx" class="flex items-center gap-2 mb-1">
-                <select v-model="k.typ" class="ctrl text-xs w-32">
-                  <option value="email">E-Mail</option>
-                  <option value="telefon">Telefon</option>
-                  <option value="postadresse">Postadresse</option>
-                </select>
-                <input v-model="k.wert" class="ctrl flex-1" :placeholder="k.typ === 'email' ? 'max@example.de' : k.typ === 'telefon' ? '+49 …' : 'Straße, PLZ Ort'" />
-                <button @click="edit.kontakte.splice(idx, 1)" type="button" class="text-red-400 hover:text-red-600 text-xs">✕</button>
+              <div v-for="(k, idx) in edit.kontakte" :key="idx" class="mb-2 p-2 border border-gray-100 rounded-lg bg-gray-50 dark:bg-[#1a1d27] dark:border-[#2d3148]">
+                <div class="flex items-center gap-2 mb-1">
+                  <select v-model="k.typ" class="ctrl text-xs flex-1">
+                    <option value="email">E-Mail</option>
+                    <option value="telefon">Telefon</option>
+                    <option value="postadresse">Postadresse</option>
+                  </select>
+                  <button @click="edit.kontakte.splice(idx, 1)" type="button" class="text-red-400 hover:text-red-600 text-xs px-1">✕</button>
+                </div>
+                <input v-model="k.wert" class="ctrl" :placeholder="k.typ === 'email' ? 'max@example.de' : k.typ === 'telefon' ? '+49 …' : 'Straße, PLZ Ort'" />
               </div>
               <button @click="edit.kontakte.push({ typ: 'email', wert: '' })" type="button" class="text-blue-600 hover:text-blue-800 text-xs font-medium mt-1">+ Kontakt hinzufügen</button>
             </div>
@@ -275,7 +292,7 @@ const MemberManager = {
             <button v-if="canEditChapter(ch.chapterId)" @click="removeChapter(ch)" class="text-red-400 hover:text-red-600 text-xs ml-2">✕</button>
           </div>
           <div v-if="!selected.chapters?.length" class="text-gray-300 text-xs py-2 text-center">Keine Mitgliedschaften</div>
-          <div v-if="isSuperadminAnywhere || hasAnyChapterRole" class="mt-4 pt-4 border-t border-gray-100">
+          <div v-if="isChapterAdminAnywhere || hasAnyChapterRole" class="mt-4 pt-4 border-t border-gray-100">
             <div class="text-xs font-semibold text-gray-500 mb-2">Mitgliedschaft hinzufügen</div>
             <div class="flex items-end gap-2 flex-wrap">
               <div class="flex-1 min-w-[120px]">

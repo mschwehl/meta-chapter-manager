@@ -16,8 +16,7 @@ const CRED_CACHE_TTL = 10_000; // 10 seconds
 
 // In-memory revocation table: kuerzel → timestamp (ms).
 // JWTs issued before this timestamp are rejected by authMiddleware.
-// Intentionally NOT persisted to git – keeps the data repo clean.
-// After a server restart old tokens remain valid until they expire naturally (8 h).
+// Pure in-memory — cleared on pod/server restart (intentional: everyone re-logs in).
 const _revokedAt = new Map();
 
 // Build a simpleGit instance with the process-kill timeout and SSL config always applied.
@@ -147,8 +146,15 @@ function buildAuthUrl(url) {
 }
 
 async function ensureGitIdentity(git) {
-  await git.addConfig('user.name', config.gitDbAuthorName);
+  await git.addConfig('user.name',  config.gitDbAuthorName);
   await git.addConfig('user.email', config.gitDbAuthorEmail);
+  // Performance: disable automatic GC pauses and preload the index into RAM.
+  // gc.auto=0  prevents background repacking after every commit (huge speedup on
+  //            repos with many small files). Run `git gc` manually when needed.
+  // core.preloadindex=true  loads the index into memory once per process so
+  //            repeated `git add / status` calls avoid redundant disk reads.
+  await git.addConfig('gc.auto', '0').catch(() => {});
+  await git.addConfig('core.preloadindex', 'true').catch(() => {});
 }
 
 async function initDatabase() {
@@ -234,7 +240,7 @@ async function writeJson(filePath, data, commitMessage, authorKuerzel) {
   }
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, json, 'utf-8');
-  await gitSave(commitMessage || 'Update', authorKuerzel);
+  await gitSave(commitMessage || 'Update', authorKuerzel, filePath);
   const cat = _fileCategory(filePath);
   if (cat !== 'credentials') {
     sse.broadcast('invalidate', { category: cat, id: path.basename(filePath, '.json'), action: 'write', by: authorKuerzel || 'system' });
@@ -243,7 +249,7 @@ async function writeJson(filePath, data, commitMessage, authorKuerzel) {
 
 async function deleteJson(filePath) {
   await fs.unlink(filePath);
-  await gitSave(`Gelöscht: ${path.basename(filePath)}`, 'system');
+  await gitSave(`Gelöscht: ${path.basename(filePath)}`, 'system', filePath);
   const cat = _fileCategory(filePath);
   if (cat !== 'credentials') {
     sse.broadcast('invalidate', { category: cat, id: path.basename(filePath, '.json'), action: 'delete' });
@@ -270,15 +276,28 @@ function _fileCategory(filePath) {
  * can never block a write request or leave a dead daemon thread behind.
  * All operations are serialised via withGitLock to avoid lock-file races.
  */
-async function gitSave(commitMessage, authorKuerzel) {
+/**
+ * Stage and commit changes.
+ * @param {string}  commitMessage
+ * @param {string}  [authorKuerzel]
+ * @param {string}  [filePath]  When provided, only that file is staged (fast).
+ *                              Omit or pass null/undefined to stage everything (git add .).
+ */
+async function gitSave(commitMessage, authorKuerzel, filePath) {
   return withGitLock(async () => {
     const git = getGit();
     try {
-      await git.add('.');
+      // Scope git-add to the specific file when possible — avoids a full tree
+      // scan on every write and cuts per-save latency dramatically on large repos.
+      if (filePath) {
+        await git.add([path.relative(DB_PATH, filePath)]);
+      } else {
+        await git.add('.');
+      }
       const status = await git.status();
       if (status.staged.length === 0) return; // nothing to commit
       const kuerzel = authorKuerzel || 'system';
-      const author = `${kuerzel} <${kuerzel}@mcm.local>`;
+      const author  = `${kuerzel} <${kuerzel}@mcm.local>`;
       const message = `${kuerzel}: ${commitMessage}`;
       await git.commit(message, { '--author': author });
       logger.debug('git.commit', { msg: commitMessage });
@@ -394,8 +413,7 @@ async function deleteCredential(kuerzel, authorKuerzel) {
 
 /**
  * Forces all active JWT sessions for a user to fail on the next API request.
- * Stored only in process memory – no file write, no git commit.
- * After a server restart existing tokens remain valid until their 8 h expiry.
+ * Persisted to data/revocation.json so the invalidation survives a restart.
  */
 function invalidateUserToken(kuerzel) {
   _revokedAt.set(kuerzel, Date.now());
