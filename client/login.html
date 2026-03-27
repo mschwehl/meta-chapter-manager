@@ -4,81 +4,131 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MCM – Login</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <script>
+    (function(){
+      var s=localStorage.getItem('mcm-dark');
+      var sys=window.matchMedia('(prefers-color-scheme:dark)').matches;
+      if(s==='true'||(s===null&&sys)) document.documentElement.classList.add('dark');
+    })();
+  </script>
   <script src="/vendor/tailwindcss-browser.js"></script>
   <script src="/store.js"></script>
   <script src="/branding.js"></script>
   <script src="/branding.custom.js" onerror="void 0"></script>
+  <style>
+    * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; }
+    .auth-input { display:block; width:100%; padding:10px 13px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; color:#0f172a; outline:none; transition:all .15s ease; }
+    .auth-input:focus { background:#fff; border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.12); }
+    .auth-input::placeholder { color:#94a3b8; }
+    .auth-btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:10px 16px; background:#2563eb; color:#fff; font-weight:600; font-size:14px; border:none; border-radius:8px; cursor:pointer; transition:all .15s ease; letter-spacing:.01em; }
+    .auth-btn:hover:not(:disabled) { background:#1d4ed8; box-shadow:0 4px 14px rgba(37,99,235,.28); transform:translateY(-0.5px); }
+    .auth-btn:active:not(:disabled) { transform:scale(0.99); }
+    .auth-btn:disabled { opacity:.55; cursor:not-allowed; }
+    .brand-dots { background-image:radial-gradient(rgba(255,255,255,.14) 1px, transparent 1px); background-size:26px 26px; }
+    /* Dark mode */
+    :where(html.dark) .auth-input { background:#1e2130; border-color:#334155; color:#e2e8f0; }
+    :where(html.dark) .auth-input:focus { background:#252a3d; border-color:#3b82f6; }
+    :where(html.dark) .auth-input::placeholder { color:#475569; }
+  </style>
+  <style type="text/tailwindcss">
+    @custom-variant dark (&:where(.dark, .dark *));
+  </style>
 </head>
-<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen flex items-center justify-center p-4">
-  <div id="app" class="w-full max-w-sm" style="-webkit-font-smoothing:antialiased">
+<body>
+<div id="app" class="min-h-screen flex" style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
 
-    <!-- Logo -->
-    <div class="text-center mb-8">
-      <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl shadow-lg shadow-blue-500/20 mb-4">
-        <span class="text-white text-xl font-black tracking-tight">{{ branding.logoText }}</span>
+  <!-- ── Brand panel (lg+) ── -->
+  <div class="hidden lg:flex lg:w-[420px] xl:w-[460px] shrink-0 relative flex-col justify-between p-10 xl:p-12 overflow-hidden" style="background:#0f172a">
+    <div class="absolute inset-0 brand-dots opacity-50 pointer-events-none"></div>
+    <div class="absolute -top-40 -left-40 w-80 h-80 rounded-full pointer-events-none" style="background:radial-gradient(circle,rgba(59,130,246,.12) 0%,transparent 70%)"></div>
+    <div class="absolute -bottom-20 -right-10 w-72 h-72 rounded-full pointer-events-none" style="background:radial-gradient(circle,rgba(139,92,246,.08) 0%,transparent 70%)"></div>
+
+    <!-- Logo mark -->
+    <div class="relative z-10 flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl flex items-center justify-center text-white text-[11px] font-black shrink-0 shadow-lg" style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);box-shadow:0 4px 14px rgba(37,99,235,.35)">
+        {{ (branding.logoText || 'APP').slice(0,3) }}
       </div>
-      <h1 class="text-white text-xl font-bold tracking-tight">{{ branding.appName }}</h1>
-      <p class="text-slate-400 text-sm mt-1">{{ orgName }}</p>
+      <span class="font-semibold text-sm" style="color:#e2e8f0">{{ branding.appName }}</span>
     </div>
 
-    <!-- Demo banner -->
-    <div v-if="demoMode" class="mb-4 px-4 py-3 rounded-xl bg-amber-400/15 border border-amber-400/40 text-amber-200 text-[13px] text-center">
-      <span class="font-semibold">Demo-Modus</span> · Kürzel <code class="font-mono bg-amber-400/20 px-1 rounded">admin</code> · Passwort <code class="font-mono bg-amber-400/20 px-1 rounded">admin</code>
+    <!-- Headline -->
+    <div class="relative z-10 space-y-5">
+      <div>
+        <h1 class="text-2xl xl:text-[1.85rem] font-bold tracking-tight leading-[1.25] mb-3" style="color:#f1f5f9">{{ branding.orgName }}</h1>
+        <p class="text-sm leading-relaxed" style="color:#64748b">Mitglieder, Sparten und Veranstaltungen —<br>alles an einem Ort verwalten.</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);color:#94a3b8">
+          <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:#34d399"></span>Rollenverwaltung
+        </span>
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);color:#94a3b8">
+          <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:#60a5fa"></span>Echtzeit-Sync
+        </span>
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);color:#94a3b8">
+          <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:#a78bfa"></span>Multi-Chapter
+        </span>
+      </div>
     </div>
 
-    <!-- Login Card -->
-    <div class="bg-white rounded-2xl shadow-2xl shadow-black/20 p-7">
-      <h2 class="text-gray-800 font-semibold text-base mb-5">Anmelden</h2>
+    <!-- Footer -->
+    <div class="relative z-10 flex items-center justify-between">
+      <p class="text-xs" style="color:#334155">{{ branding.copyright }}</p>
+      <p v-if="version" class="text-xs font-mono" style="color:#1e293b">v{{ version }}</p>
+    </div>
+  </div>
 
-      <form @submit.prevent="login">
-        <div class="mb-4">
-          <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Kürzel</label>
-          <input
-            v-model="form.kuerzel"
-            type="text"
-            placeholder="z.B. s888"
-            autocomplete="username"
-            class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
-            required
-          />
+  <!-- ── Form panel ── -->
+  <div class="flex-1 flex items-center justify-center p-6 bg-white dark:bg-[#0d1117]">
+    <div class="w-full max-w-[360px]">
+
+      <!-- Mobile logo -->
+      <div class="text-center mb-8 lg:hidden">
+        <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-3 shadow-lg" style="background:linear-gradient(135deg,#3b82f6,#1d4ed8)">
+          <span class="text-white font-black text-sm">{{ (branding.logoText || 'APP').slice(0,3) }}</span>
+        </div>
+        <h1 class="font-bold text-lg text-gray-900 dark:text-gray-100">{{ branding.appName }}</h1>
+        <p class="text-sm mt-0.5 text-gray-500 dark:text-gray-400">{{ orgName }}</p>
+      </div>
+
+      <div class="mb-7 hidden lg:block">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Willkommen zurück</h2>
+        <p class="text-sm mt-1 text-gray-500 dark:text-gray-400">{{ orgName }}</p>
+      </div>
+
+      <form @submit.prevent="login" class="space-y-4">
+        <div>
+          <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1.5" style="color:#64748b">Kürzel</label>
+          <input v-model="form.kuerzel" type="text" placeholder="z.B. s888" autocomplete="username" class="auth-input" required />
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1.5" style="color:#64748b">Passwort</label>
+          <input v-model="form.password" type="password" placeholder="••••••••" autocomplete="current-password"
+            pattern="^\S.*\S$|^\S$" title="Kein Leerzeichen am Anfang oder Ende" class="auth-input" required />
         </div>
 
-        <div class="mb-5">
-          <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Passwort</label>
-          <input
-            v-model="form.password"
-            type="password"
-            placeholder="••••••••"
-            autocomplete="current-password"
-            pattern="^\S.*\S$|^\S$"
-            title="Kein Leerzeichen am Anfang oder Ende"
-            class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
-            required
-          />
+        <div v-if="error" class="flex items-start gap-2.5 px-3.5 py-3 rounded-lg" style="background:#fef2f2;border:1px solid #fecaca">
+          <svg class="w-4 h-4 shrink-0 mt-px" style="color:#ef4444" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+          <span class="text-sm" style="color:#b91c1c">{{ error }}</span>
         </div>
 
-        <div v-if="error" class="mb-4 px-3.5 py-2.5 bg-red-50 border border-red-200 rounded-lg text-red-700 text-[13px]">
-          {{ error }}
-        </div>
-
-        <button
-          type="submit"
-          :disabled="loading"
-          class="w-full py-2.5 bg-gradient-to-b from-blue-500 to-blue-700 text-white font-semibold text-sm rounded-lg hover:from-blue-600 hover:to-blue-800 disabled:opacity-50 transition-all shadow-sm shadow-blue-600/25 hover:shadow-blue-600/35 active:translate-y-px"
-        >
-          <span v-if="loading">Anmelden …</span>
-          <span v-else>Anmelden</span>
+        <button type="submit" :disabled="loading" class="auth-btn" style="margin-top:8px">
+          <svg v-if="loading" class="w-4 h-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+          {{ loading ? 'Anmelden …' : 'Anmelden' }}
         </button>
       </form>
 
-      <p class="text-center text-slate-400 text-[11px] mt-5">
+      <p class="text-center text-sm mt-6" style="color:#94a3b8">
         Noch kein Konto?
-        <a href="/register.html" class="text-blue-600 hover:underline font-medium">Registrierung beantragen</a>
+        <a href="/register.html" class="font-semibold" style="color:#2563eb">Registrierung beantragen</a>
       </p>
-    </div>
 
-    <p class="text-center text-slate-500 text-[11px] mt-6">{{ branding.copyright }}<span v-if="version" class="ml-2 text-slate-600">v{{ version }}</span></p>
+      <p class="text-center text-xs mt-8 lg:hidden" style="color:#cbd5e1">{{ branding.copyright }}<span v-if="version" class="ml-2">v{{ version }}</span></p>
+    </div>
   </div>
+
+</div>
 
   <script src="/vendor/vue.global.prod.js"></script>
   <script>
@@ -89,7 +139,6 @@
         const form = reactive({ kuerzel: '', password: '' });
         const error = ref('');
         const loading = ref(false);
-        const demoMode = ref(false);
         const orgName = ref(window.APP_BRANDING.orgName);
         const version = ref('');
 
@@ -104,7 +153,6 @@
           }
           try {
             const st = await fetch('/api/status').then(r => r.json());
-            if (st.demoMode) demoMode.value = true;
             if (st.orgName)  orgName.value  = st.orgName;
             if (st.version)  version.value  = st.version;
           } catch { /* server may not be ready */ }
@@ -142,7 +190,7 @@
           }
         }
 
-        return { form, error, loading, login, branding: window.APP_BRANDING, demoMode, orgName, version };
+        return { form, error, loading, login, branding: window.APP_BRANDING, orgName, version };
       }
     }).mount('#app');
   </script>

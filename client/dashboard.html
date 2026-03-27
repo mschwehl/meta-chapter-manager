@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MCM – Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <script src="/vendor/tailwindcss-browser.js"></script>
   <script src="/store.js"></script>
   <script src="/i18n.js"></script>
@@ -98,7 +99,7 @@
           </div>
         </div>
 
-        <!-- Mitglieder (Spartenadmin / Superadmin / OrgaAdmin) -->
+        <!-- Mitglieder (Spartenadmin / Chapter-Admin / OrgaAdmin) -->
         <a v-if="canSeeMembers" href="/members.html"
           class="bg-white rounded-xl shadow hover:shadow-md border-l-4 border-indigo-500 p-6 flex items-start gap-4 cursor-pointer transition-shadow">
           <div class="text-4xl leading-none">👥</div>
@@ -108,7 +109,7 @@
           </div>
         </a>
 
-        <!-- Chapter (Superadmin / OrgaAdmin) -->
+        <!-- Chapter (Chapter-Admin / OrgaAdmin) -->
         <a v-if="canSeeChapters" href="/chapters.html"
           class="bg-white rounded-xl shadow hover:shadow-md border-l-4 border-purple-500 p-6 flex items-start gap-4 cursor-pointer transition-shadow">
           <div class="text-4xl leading-none">🏢</div>
@@ -202,7 +203,7 @@
 
         // Role helpers
         const isOrgaAdmin = computed(() => !!user.value.orgaAdmin);
-        const isSuperadminAnywhere = computed(() => {
+        const isChapterAdminAnywhere = computed(() => {
           if (isOrgaAdmin.value) return true;
           const roles = user.value.roles || {};
           return Object.values(roles).some(r => r.level === ROLE_LEVEL.CHAPTER);
@@ -211,7 +212,7 @@
           return Object.keys(user.value.roles || {}).length > 0;
         });
         const canSeeMembers = computed(() => isOrgaAdmin.value || hasAnyChapterRole.value);
-        const canSeeChapters = computed(() => isSuperadminAnywhere.value);
+        const canSeeChapters = computed(() => isChapterAdminAnywhere.value);
         const canSeeOrga = computed(() => isOrgaAdmin.value);
 
         function statusClass(status) {
@@ -247,7 +248,7 @@
         onMounted(loadEvents);
 
         return { user, events, loading, filter, statusClass, loadEvents, logout, i18n,
-          isOrgaAdmin, isSuperadminAnywhere, hasAnyChapterRole, canSeeMembers, canSeeChapters, canSeeOrga,
+          isOrgaAdmin, isChapterAdminAnywhere, hasAnyChapterRole, canSeeMembers, canSeeChapters, canSeeOrga,
           ROLE_LEVEL: window.ROLE_LEVEL };
       }
     });

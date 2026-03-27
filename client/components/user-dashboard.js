@@ -6,7 +6,7 @@
  */
 const UserDashboard = {
   name: 'UserDashboard',
-  inject: ['api', 'i18n', 'user', 'isOrgaAdmin', 'isZeitstelle', 'chapterDirectory'],
+  inject: ['api', 'i18n', 'user', 'isOrgaAdmin', 'isZeitstelle', 'chapterDirectory', 'sseEvent'],
   emits: ['navigate'],
   data() {
     return {
@@ -35,6 +35,11 @@ const UserDashboard = {
     },
   },
   methods: {
+    fmtDate(iso) {
+      if (!iso) return '–';
+      const [y, m, d] = iso.split('-');
+      return `${d}.${m}.${y}`;
+    },
     async load() {
       this.loading = true;
       try {
@@ -43,6 +48,9 @@ const UserDashboard = {
       } catch {}
       this.loading = false;
     },
+  },
+  watch: {
+    sseEvent(evt) { if (evt?.category === 'user') this.load(); },
   },
   mounted() { this.load(); },
   template: `
@@ -95,7 +103,7 @@ const UserDashboard = {
           <span v-for="sp in (role.sparten || [])" :key="cid + '|' + sp"
             :class="role.level === ROLE_LEVEL.CHAPTER ? 'bg-teal-100 text-teal-700' : 'bg-blue-100 text-blue-700'"
             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold">
-            🏓 {{ role.level === ROLE_LEVEL.CHAPTER ? 'Spartenleiter' : 'Spartenadmin' }} · {{ i18n.sparte(sp) }} ({{ i18n.chapter(cid) }})
+            🏓 Spartenadmin · {{ i18n.sparte(sp) }} ({{ i18n.chapter(cid) }})
           </span>
         </template>
         <span v-if="!isOrgaAdmin && !isZeitstelle && !Object.keys(user.roles || {}).length"
@@ -122,7 +130,7 @@ const UserDashboard = {
             </div>
           </div>
           <div class="text-right">
-            <div class="text-xs text-gray-500">seit {{ ch.eintrittsdatum }}</div>
+            <div class="text-xs text-gray-500">seit {{ fmtDate(ch.eintrittsdatum) }}</div>
             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700">Aktiv</span>
           </div>
         </div>
@@ -135,8 +143,10 @@ const UserDashboard = {
             </div>
           </div>
           <div class="text-right">
-            <div v-if="ch.austrittsdatum" class="text-xs text-gray-400">bis {{ ch.austrittsdatum }}</div>
-            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-500">Inaktiv</span>
+            <div v-if="ch.austrittsdatum && ch.austrittsdatum < new Date().toISOString().slice(0,10)" class="text-xs text-gray-400">Ausgetreten {{ fmtDate(ch.austrittsdatum) }}</div>
+            <div v-else-if="ch.eintrittsdatum > new Date().toISOString().slice(0,10)" class="text-xs text-gray-400">Eintritt {{ fmtDate(ch.eintrittsdatum) }}</div>
+            <span v-if="ch.austrittsdatum && ch.austrittsdatum < new Date().toISOString().slice(0,10)" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-500">Ausgetreten</span>
+            <span v-else class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">Ausstehend</span>
           </div>
         </div>
       </div>
@@ -150,8 +160,8 @@ const UserDashboard = {
       </button>
     </div>
 
-    <!-- Chapter directory -->
-    <div v-if="chapterDirectory && chapterDirectory.length">
+    <!-- Chapter directory (only for plain members without any chapter roles) -->
+    <div v-if="chapterDirectory && chapterDirectory.length && !isOrgaAdmin && !isZeitstelle && !Object.keys(user.roles || {}).length">
       <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Verfügbare Chapter</h2>
       <div class="space-y-3">
         <div v-for="ch in chapterDirectory" :key="ch.id"

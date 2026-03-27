@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const { JWT_SECRET } = require('../middleware/auth');
 const { authMiddleware } = require('../middleware/auth');
-const { getCredential, writeCredential, readUser, readChapters, readOrganisation } = require('../lib/gitdb');
+const { getCredential, writeCredential, readUser, readChapters, readOrganisation, invalidateUserToken } = require('../lib/gitdb');
 const logger = require('../lib/logger');
 const { ROLE_LEVEL } = require('../../client/i18n.js');
 
@@ -34,6 +34,15 @@ router.post('/login', loginLimiter, async (req, res) => {
     return res.status(400).json({ error: 'Kürzel und Passwort erforderlich' });
   }
 
+  // Reject immediately if no user profile exists.
+  // This closes the phantom-login gap where kuerzel === password would succeed
+  // for any string that has no credential entry yet.
+  const user = await readUser(kuerzel).catch(() => null);
+  if (!user) {
+    logger.warn('auth.login.fail', { user: kuerzel, ip: req.ip, reason: 'user_not_found' });
+    return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
+  }
+
   const credential = await getCredential(kuerzel);
 
   // No credential entry = kuerzel is the initial password (set on account creation / after reset)
@@ -53,13 +62,12 @@ router.post('/login', loginLimiter, async (req, res) => {
     logger.info('auth.login.ok', { user: kuerzel, ip: req.ip });
   }
 
-  const user = await readUser(kuerzel).catch(() => ({ kuerzel, name: '', vorname: '' }));
   const chapters = await readChapters();
   const org = await readOrganisation().catch(() => ({ orgAdmins: [] }));
 
   // Rollen aus chapter-JSON ableiten.
   // Einheitliche Form: { chapterId: { level: 'chapter'|'sparte', sparten: string[] } }
-  //   level 'chapter'  = Chapter-Admin (Superadmin) – Vollzugriff auf alle Sparten
+  //   level 'chapter'  = Chapter-Admin – Vollzugriff auf alle Sparten
   //   level 'sparte'   = Spartenadmin / Spartenleiter – nur eigene Sparten
   //   sparten[]        = Sparten, in denen der User explizit als Admin/Leiter eingetragen ist
   const roles = {};
@@ -129,9 +137,58 @@ router.post('/change-password', authMiddleware, async (req, res) => {
 
   const newHash = await bcrypt.hash(newPassword, 12);
   await writeCredential(kuerzel, newHash, false, kuerzel);
+  invalidateUserToken(kuerzel); // revoke existing sessions immediately
   logger.info('auth.password_changed', { user: kuerzel, ip: req.ip });
 
   res.json({ message: 'Passwort erfolgreich geändert' });
+});
+
+// POST /api/auth/refresh – re-issue a fresh 8 h token for the authenticated user.
+// Re-reads roles from disk so any role changes are reflected immediately.
+router.post('/refresh', authMiddleware, async (req, res) => {
+  const { kuerzel } = req.user;
+  const user = await readUser(kuerzel).catch(() => null);
+  if (!user) return res.status(401).json({ error: 'Benutzer nicht gefunden' });
+
+  const [chapters, org] = await Promise.all([
+    readChapters(),
+    readOrganisation().catch(() => ({ orgAdmins: [], zeitstelle: [] })),
+  ]);
+
+  const roles = {};
+  for (const chapter of chapters) {
+    const isChapterAdmin = (chapter.admins || []).includes(kuerzel);
+    const adminSparten = (chapter.sparten || [])
+      .filter(sp => (sp.admins || []).includes(kuerzel))
+      .map(sp => sp.id);
+    if (isChapterAdmin) {
+      roles[chapter.id] = { level: ROLE_LEVEL.CHAPTER, sparten: adminSparten };
+    } else if (adminSparten.length > 0) {
+      roles[chapter.id] = { level: ROLE_LEVEL.SPARTE, sparten: adminSparten };
+    }
+  }
+
+  const isOrgaAdmin = (org.orgAdmins || []).includes(kuerzel);
+  const isZeitstelle = (org.zeitstelle || []).includes(kuerzel);
+  const credential = await getCredential(kuerzel);
+
+  const token = jwt.sign(
+    { kuerzel, name: user.name || kuerzel, vorname: user.vorname || '', roles, orgaAdmin: isOrgaAdmin, zeitstelle: isZeitstelle },
+    JWT_SECRET,
+    { expiresIn: '8h' }
+  );
+
+  logger.info('auth.token_refreshed', { user: kuerzel, ip: req.ip });
+  res.json({
+    token,
+    kuerzel,
+    name: user.name || kuerzel,
+    vorname: user.vorname || '',
+    roles,
+    orgaAdmin: isOrgaAdmin,
+    zeitstelle: isZeitstelle,
+    mustChangePassword: credential ? credential.mustChange : false,
+  });
 });
 
 module.exports = router;

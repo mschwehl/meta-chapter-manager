@@ -49,8 +49,14 @@ const config = {
   // Local path for generated documents (DOCX etc.) – NOT in git
   docsDir: process.env.DOCS_DIR || path.join(__dirname, '..', 'docs'),
 
-  // If https git URL: skip SSL verification (self-signed certs)
-  gitSslVerify: process.env.GIT_SSL_VERIFY !== 'false',
+  // If https git URL: skip SSL verification (self-signed certs).
+  // Defaults to false (SSL NOT verified) — set GIT_SSL_VERIFY=true to enable.
+  gitSslVerify: process.env.GIT_SSL_VERIFY === 'true',
+
+  // Milliseconds before a git subprocess is killed if it produces no output.
+  // Prevents zombie git threads when the remote is unreachable.
+  // Increase for very slow links; set 0 to disable (not recommended in production).
+  gitTimeoutMs: parseInt(process.env.GIT_TIMEOUT_MS || '30000', 10),
 
   // Allowed CORS origin for the API.
   // '': same-origin only (recommended for self-hosted / OpenShift behind a single route)

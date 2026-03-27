@@ -21,12 +21,16 @@ const DocsViewer = {
     },
   },
   mounted() { this.load(); },
+  emits: ['back'],
   template: `
 <div class="p-6 max-w-5xl mx-auto space-y-4">
   <div class="flex items-center justify-between">
-    <div>
-      <h1 class="text-xl font-bold text-gray-800">Dokumente</h1>
-      <p class="text-gray-500 text-xs mt-1">Generierte Freigabelisten für EPOS/PVS+ · Identifikation über Kürzel (PK)</p>
+    <div class="flex items-center gap-3">
+      <button @click="$emit('back')" class="btn-back"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>Zurück</button>
+      <div>
+        <h1 class="text-xl font-bold text-gray-800">Dokumente</h1>
+        <p class="text-gray-500 text-xs mt-1">Generierte Freigabelisten für EPOS/PVS+ · Identifikation über Kürzel (PK)</p>
+      </div>
     </div>
     <button @click="load" class="btn-sec text-xs">↻ Aktualisieren</button>
   </div>

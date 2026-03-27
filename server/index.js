@@ -14,7 +14,7 @@ const orgaRoutes = require('./routes/orga');
 const docsRoutes = require('./routes/docs');
 const requestsRoutes = require('./routes/requests');
 const { authMiddleware } = require('./middleware/auth');
-const { initDatabase, startAutoSync, gitCommitAndPush, readUser, isDemoMode, readOrganisation } = require('./lib/gitdb');
+const { initDatabase, startAutoSync, gitCommitAndPush, readUser, readOrganisation, startGitWatchdog, stopGitWatchdog } = require('./lib/gitdb');
 const sse = require('./lib/sse');
 const { version: APP_VERSION } = require('./package.json');
 const logger = require('./lib/logger');
@@ -39,6 +39,9 @@ app.use((_req, res, next) => {
 
 app.use(express.static(path.join(__dirname, '../client')));
 
+// Redirect /favicon.ico to /favicon.svg
+app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
+
 // Public routes
 app.use('/api/auth', authRoutes);
 // Public registration: rate-limited, rewrite URL so requestsRouter matches /register
@@ -49,7 +52,7 @@ app.post('/api/auth/register', registerLimiter, (req, res, next) => { req.url = 
 app.get('/api/status', async (_req, res) => {
   let orgName = null;
   try { const org = await readOrganisation(); orgName = org.name || null; } catch { /* db may not be ready yet */ }
-  res.json({ demoMode: isDemoMode(), orgName, version: APP_VERSION });
+  res.json({ orgName, version: APP_VERSION });
 });
 
 // GET /api/sse – Server-Sent Events stream (token via query param)
@@ -92,9 +95,10 @@ app.use('/api/docs', authMiddleware, docsRoutes);
 app.get('/api/me', authMiddleware, async (req, res) => {
   try {
     const u = await readUser(req.user.kuerzel);
-    res.json(u);
+    // Merge JWT-derived flags so the client keeps orgaAdmin / zeitstelle / roles
+    res.json({ ...u, orgaAdmin: req.user.orgaAdmin || false, zeitstelle: req.user.zeitstelle || false, roles: req.user.roles || {} });
   } catch {
-    res.json({ kuerzel: req.user.kuerzel, name: req.user.name, vorname: req.user.vorname, chapters: [] });
+    res.json({ kuerzel: req.user.kuerzel, name: req.user.name, vorname: req.user.vorname, chapters: [], orgaAdmin: req.user.orgaAdmin || false, zeitstelle: req.user.zeitstelle || false, roles: req.user.roles || {} });
   }
 });
 
@@ -139,9 +143,11 @@ async function start() {
 
   // Start periodic git commit + push (every 5 minutes)
   startAutoSync();
+  // Start git watchdog (checks every 60 s for stuck lock / orphaned processes)
+  startGitWatchdog();
 
   app.listen(config.port, () => {
-    logger.info('startup.listen', { port: config.port, demoMode: isDemoMode() });
+    logger.info('startup.listen', { port: config.port });
     console.log(`Server started on http://localhost:${config.port}`);
   });
 }
@@ -154,6 +160,7 @@ start().catch(err => {
 // Graceful shutdown on SIGTERM (pod eviction, docker stop, k8s rolling update)
 async function shutdown(signal) {
   logger.info('shutdown', { signal });
+  stopGitWatchdog();
   try {
     const result = await gitCommitAndPush();
     logger.info('shutdown.git', { committed: result.committed, pushed: result.pushed });

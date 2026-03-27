@@ -20,9 +20,12 @@ RUN cd server && npm ci --omit=dev
 COPY server/ ./server/
 COPY client/ ./client/
 
-# Download vendor libs (Tailwind CSS, Vue) into client/vendor/
+# Download vendor libs only when not already bundled (internet-available builds).
+# In airgapped environments, vendor files are committed to the repo and copied above.
 COPY download-vendor.js ./
-RUN node download-vendor.js && rm download-vendor.js
+RUN ([ -f client/vendor/tailwindcss-browser.js ] && [ -f client/vendor/vue.global.prod.js ]) \
+    || node download-vendor.js
+RUN rm download-vendor.js
 
 # Ensure a default branding.custom.js exists (override via volume mount)
 RUN test -f client/branding.custom.js \

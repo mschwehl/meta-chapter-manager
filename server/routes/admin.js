@@ -19,7 +19,7 @@ router.get('/users', async (req, res) => {
   const { roles, orgaAdmin, zeitstelle } = req.user;
 
   // OrgaAdmin / Zeitstelle: full access.
-  // Chapter admins (superadmin / spartenadmin): only their chapters.
+  // Chapter admins (chapteradmin / spartenadmin): only their chapters.
   // Regular members: read-only view of all org members (edit buttons are guarded in the SPA).
   const allowedChapters = (orgaAdmin || zeitstelle)
     ? null  // null = all
@@ -268,6 +268,34 @@ router.get('/sysinfo', requireOrgaAdmin, async (req, res) => {
       },
       gitLog: log,
     });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/admin/git — Read-only git CLI for OrgaAdmin
+// Whitelisted subcommands only. No writes, no pushes.
+const GIT_ALLOWED = new Set(['log', 'status', 'diff', 'show', 'branch', 'remote', 'stash']);
+router.post('/git', requireOrgaAdmin, async (req, res) => {
+  const args = req.body.args;
+  if (!Array.isArray(args) || !args.length) return res.status(400).json({ error: 'args[] erforderlich' });
+  // Validate: all args must be strings, first arg is the subcommand
+  if (!args.every(a => typeof a === 'string')) return res.status(400).json({ error: 'Ungültige Argumente' });
+  const subcmd = args[0].replace(/^-+/, '');
+  if (!GIT_ALLOWED.has(subcmd)) return res.status(403).json({ error: `Nicht erlaubt: git ${subcmd}. Erlaubt: ${[...GIT_ALLOWED].join(', ')}` });
+  // Block shell metacharacters
+  if (args.some(a => /[;&|`$(){}]/.test(a))) return res.status(400).json({ error: 'Ungültige Zeichen in Argumenten' });
+
+  const { execFile } = require('child_process');
+  const gitBin = 'git';
+  try {
+    const output = await new Promise((resolve, reject) => {
+      execFile(gitBin, args, { cwd: DB_PATH, timeout: 10_000, maxBuffer: 512 * 1024 }, (err, stdout, stderr) => {
+        if (err) reject(new Error(stderr || err.message));
+        else resolve(stdout);
+      });
+    });
+    res.json({ output });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MCM â€“ Chapter Verwaltung</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <script src="/vendor/tailwindcss-browser.js"></script>
   <script src="/store.js"></script>
   <script src="/i18n.js"></script>
@@ -56,13 +57,13 @@
           </div>
         </div>
 
-        <!-- Superadmins -->
+        <!-- Chapter-Admins -->
         <div class="mb-4">
-          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Superadmins</div>
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Chapter-Admins</div>
           <div class="flex flex-wrap gap-2">
-            <span v-for="k in (chapter.superadmins||[])" :key="k"
+            <span v-for="k in (chapter.admins||[])" :key="k"
               class="px-3 py-1 bg-purple-50 text-purple-700 rounded-full text-xs font-mono">{{ k }}</span>
-            <span v-if="!chapter.superadmins||!chapter.superadmins.length" class="text-gray-400 text-sm">â€“</span>
+            <span v-if="!chapter.admins||!chapter.admins.length" class="text-gray-400 text-sm">–</span>
           </div>
         </div>
 
@@ -114,9 +115,9 @@
           <p class="text-xs text-gray-400 mt-1">SchlÃ¼ssel laut Datenmodell, z.B. tischtennis</p>
         </div>
 
-        <!-- Superadmins -->
+        <!-- Chapter-Admins -->
         <div>
-          <label class="label">Superadmins (Komma-getrennt)</label>
+          <label class="label">Chapter-Admins (Komma-getrennt)</label>
           <input v-model="modal.superStr" type="text" class="input" placeholder="s888,s96" />
         </div>
 
@@ -195,7 +196,7 @@ createApp({
 
     function openNew() {
       modal.isNew = true; modal.error = '';
-      modal.form = { id: '', name: '', sparten: [], superadmins: [], spartenadmins: {} };
+      modal.form = { id: '', name: '', sparten: [], admins: [], spartenadmins: {} };
       modal.spartStr = ''; modal.superStr = ''; modal.spartenadminRows = [];
       modal.open = true;
     }
@@ -204,7 +205,7 @@ createApp({
       modal.isNew = false; modal.error = '';
       modal.form = JSON.parse(JSON.stringify(ch));
       modal.spartStr = (ch.sparten||[]).join(',');
-      modal.superStr = (ch.superadmins||[]).join(',');
+      modal.superStr = (ch.admins||[]).join(',');
       modal.spartenadminRows = Object.entries(ch.spartenadmins||{}).map(([sparte, admins]) => ({ sparte, admins: admins.join(',') }));
       modal.open = true;
     }
@@ -223,7 +224,7 @@ createApp({
         const payload = {
           ...modal.form,
           sparten: modal.spartStr.split(',').map(s=>s.trim()).filter(Boolean),
-          superadmins: modal.superStr.split(',').map(s=>s.trim()).filter(Boolean),
+          admins: modal.superStr.split(',').map(s=>s.trim()).filter(Boolean),
           spartenadmins
         };
         const method = modal.isNew ? 'POST' : 'PUT';

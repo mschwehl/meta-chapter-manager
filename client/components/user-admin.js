@@ -12,6 +12,7 @@ const UserAdmin = {
   data() {
     return {
       users: [],
+      orgAdmins: [],
       loading: false,
       filter: '',
       selected: null,
@@ -54,9 +55,21 @@ const UserAdmin = {
     async load() {
       this.loading = true;
       try {
-        const r = await this.api('/api/admin/users');
-        this.users = await r.json();
+        const [uRes, oRes] = await Promise.all([this.api('/api/admin/users'), this.api('/api/orga')]);
+        this.users = await uRes.json();
+        const org = await oRes.json();
+        this.orgAdmins = org.orgAdmins || [];
       } catch {} finally { this.loading = false; }
+    },
+    async toggleOrgAdmin(kuerzel) {
+      const isAdmin = this.orgAdmins.includes(kuerzel);
+      const next = isAdmin
+        ? this.orgAdmins.filter(k => k !== kuerzel)
+        : [...this.orgAdmins, kuerzel];
+      try {
+        const r = await this.apiPut('/api/orga', { orgAdmins: next });
+        if (r.ok) { this.orgAdmins = next; }
+      } catch {}
     },
     toggleSort(key) {
       if (this.sortBy === key) this.sortAsc = !this.sortAsc;
@@ -128,13 +141,19 @@ const UserAdmin = {
     },
   },
   mounted() { this.load(); },
+  emits: ['back'],
   template: `
-<div class="h-full flex flex-col">
+<div class="h-full flex flex-col max-w-6xl mx-auto w-full">
   <!-- Header -->
   <div class="px-6 py-4 bg-white border-b border-gray-200 flex items-center justify-between shrink-0">
-    <div>
-      <h1 class="text-lg font-bold text-gray-800">Benutzerverwaltung</h1>
-      <p class="text-gray-500 text-xs mt-0.5">{{ users.length }} Benutzer im System</p>
+    <div class="flex items-center gap-3">
+      <button @click="$emit('back')" class="btn-back">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>Zurück
+      </button>
+      <div>
+        <h1 class="text-lg font-bold text-gray-800">Benutzerverwaltung</h1>
+        <p class="text-gray-500 text-xs mt-0.5">{{ users.length }} Benutzer im System</p>
+      </div>
     </div>
     <div class="flex items-center gap-2">
       <button @click="exportExcel" class="btn-sec text-xs flex items-center gap-1.5" title="Excel-Export">
@@ -150,7 +169,7 @@ const UserAdmin = {
 
   <div class="flex-1 flex min-h-0">
     <!-- List -->
-    <div class="w-full lg:w-1/2 xl:w-2/5 flex flex-col border-r border-gray-200 bg-white">
+    <div class="flex flex-col border-r border-gray-200 bg-white" :class="(selected || creating) ? 'hidden lg:flex lg:w-1/2 xl:w-2/5' : 'w-full lg:w-1/2 xl:w-2/5'">
       <div class="px-4 py-3 border-b border-gray-100 shrink-0">
         <input v-model="filter" placeholder="Suchen … (Name oder Kürzel)" class="ctrl text-xs w-full" />
       </div>
@@ -191,11 +210,29 @@ const UserAdmin = {
     </div>
 
     <!-- Detail / Create -->
-    <div class="hidden lg:flex flex-1 overflow-y-auto bg-gray-50 min-h-0">
-      <div v-if="!selected && !creating" class="flex items-center justify-center w-full text-gray-300 text-sm">← Benutzer auswählen</div>
+    <div class="flex-1 overflow-y-auto bg-gray-50 min-h-0" :class="(selected || creating) ? 'flex' : 'hidden lg:flex'">
+      <div v-if="!selected && !creating" class="flex items-center justify-center w-full">
+        <div class="text-center space-y-4 p-8">
+          <div class="w-16 h-16 rounded-2xl bg-blue-50 text-blue-400 flex items-center justify-center mx-auto">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
+          </div>
+          <div>
+            <p class="text-gray-500 text-sm">Benutzer aus der Liste auswählen</p>
+            <p class="text-gray-400 text-xs mt-1">oder neuen Benutzer anlegen</p>
+          </div>
+          <button @click="startCreate" class="btn-sm inline-flex items-center gap-2 px-5 py-2.5 text-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            Neuer Benutzer
+          </button>
+        </div>
+      </div>
 
       <!-- Create form -->
       <div v-if="creating" class="p-6 w-full max-w-xl mx-auto">
+        <button @click="cancelCreate" class="lg:hidden flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mb-3">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          Zurück zur Liste
+        </button>
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
             <span class="text-base">👤</span>
@@ -220,14 +257,16 @@ const UserAdmin = {
             </div>
             <div>
               <label class="lbl">Kontakte</label>
-              <div v-for="(k, idx) in form.kontakte" :key="idx" class="flex items-center gap-2 mb-1">
-                <select v-model="k.typ" class="ctrl text-xs w-32">
-                  <option value="email">E-Mail</option>
-                  <option value="telefon">Telefon</option>
-                  <option value="postadresse">Postadresse</option>
-                </select>
-                <input v-model="k.wert" class="ctrl flex-1" :placeholder="k.typ === 'email' ? 'max@example.de' : k.typ === 'telefon' ? '+49 …' : 'Straße, PLZ Ort'" />
-                <button @click="form.kontakte.splice(idx, 1)" type="button" class="text-red-400 hover:text-red-600 text-xs">✕</button>
+              <div v-for="(k, idx) in form.kontakte" :key="idx" class="mb-2 p-2 border border-gray-100 rounded-lg bg-gray-50 dark:bg-[#1a1d27] dark:border-[#2d3148]">
+                <div class="flex items-center gap-2 mb-1">
+                  <select v-model="k.typ" class="ctrl text-xs flex-1">
+                    <option value="email">E-Mail</option>
+                    <option value="telefon">Telefon</option>
+                    <option value="postadresse">Postadresse</option>
+                  </select>
+                  <button @click="form.kontakte.splice(idx, 1)" type="button" class="text-red-400 hover:text-red-600 text-xs px-1">✕</button>
+                </div>
+                <input v-model="k.wert" class="ctrl" :placeholder="k.typ === 'email' ? 'max@example.de' : k.typ === 'telefon' ? '+49 …' : 'Straße, PLZ Ort'" />
               </div>
               <button @click="form.kontakte.push({ typ: 'email', wert: '' })" type="button" class="text-blue-600 hover:text-blue-800 text-xs font-medium mt-1">+ Kontakt hinzufügen</button>
             </div>
@@ -244,6 +283,10 @@ const UserAdmin = {
 
       <!-- Detail card -->
       <div v-if="selected && !creating" class="p-6 w-full max-w-xl mx-auto space-y-4">
+        <button @click="selected = null" class="lg:hidden flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          Zurück zur Liste
+        </button>
         <!-- User info -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -257,9 +300,26 @@ const UserAdmin = {
                 <div v-if="selected.kontakte && selected.kontakte.length" class="text-[11px] text-gray-400">
                   <div v-for="k in selected.kontakte" :key="k.typ + k.wert">{{ k.typ }}: {{ k.wert }}</div>
                 </div>
+                <!-- Org-Admin badge -->
+                <span v-if="orgAdmins.includes(selected.kuerzel)"
+                  class="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-700">
+                  🏛 Organisations-Admin
+                </span>
               </div>
             </div>
-            <button v-if="!edit" @click="startEdit" class="text-blue-600 text-xs font-medium hover:underline">Bearbeiten</button>
+            <div class="flex items-center gap-2">
+              <!-- Org-Admin toggle (only orgaAdmin, can't demote yourself) -->
+              <button v-if="isOrgaAdmin && selected.kuerzel !== user.kuerzel"
+                @click="toggleOrgAdmin(selected.kuerzel)"
+                :class="orgAdmins.includes(selected.kuerzel)
+                  ? 'bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100'
+                  : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'"
+                class="text-[11px] font-medium px-2.5 py-1 rounded-lg transition-all"
+                :title="orgAdmins.includes(selected.kuerzel) ? 'Org-Admin-Rechte entziehen' : 'Zum Org-Admin ernennen'">
+                {{ orgAdmins.includes(selected.kuerzel) ? '− Org-Admin' : '+ Org-Admin' }}
+              </button>
+              <button v-if="!edit" @click="startEdit" class="text-blue-600 text-xs font-medium hover:underline">Bearbeiten</button>
+            </div>
           </div>
           <!-- Edit mode -->
           <div v-if="edit" class="px-6 py-5 space-y-4">
@@ -269,14 +329,16 @@ const UserAdmin = {
             </div>
             <div>
               <label class="lbl">Kontakte</label>
-              <div v-for="(k, idx) in edit.kontakte" :key="idx" class="flex items-center gap-2 mb-1">
-                <select v-model="k.typ" class="ctrl text-xs w-32">
-                  <option value="email">E-Mail</option>
-                  <option value="telefon">Telefon</option>
-                  <option value="postadresse">Postadresse</option>
-                </select>
-                <input v-model="k.wert" class="ctrl flex-1" :placeholder="k.typ === 'email' ? 'max@example.de' : k.typ === 'telefon' ? '+49 …' : 'Straße, PLZ Ort'" />
-                <button @click="edit.kontakte.splice(idx, 1)" type="button" class="text-red-400 hover:text-red-600 text-xs">✕</button>
+              <div v-for="(k, idx) in edit.kontakte" :key="idx" class="mb-2 p-2 border border-gray-100 rounded-lg bg-gray-50 dark:bg-[#1a1d27] dark:border-[#2d3148]">
+                <div class="flex items-center gap-2 mb-1">
+                  <select v-model="k.typ" class="ctrl text-xs flex-1">
+                    <option value="email">E-Mail</option>
+                    <option value="telefon">Telefon</option>
+                    <option value="postadresse">Postadresse</option>
+                  </select>
+                  <button @click="edit.kontakte.splice(idx, 1)" type="button" class="text-red-400 hover:text-red-600 text-xs px-1">✕</button>
+                </div>
+                <input v-model="k.wert" class="ctrl" :placeholder="k.typ === 'email' ? 'max@example.de' : k.typ === 'telefon' ? '+49 …' : 'Straße, PLZ Ort'" />
               </div>
               <button @click="edit.kontakte.push({ typ: 'email', wert: '' })" type="button" class="text-blue-600 hover:text-blue-800 text-xs font-medium mt-1">+ Kontakt hinzufügen</button>
             </div>

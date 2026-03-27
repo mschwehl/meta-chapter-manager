@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MCM – Organisation</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <script src="/vendor/tailwindcss-browser.js"></script>
   <script src="/store.js"></script>
   <script src="/i18n.js"></script>
@@ -89,8 +90,8 @@
           <div class="text-xs text-gray-500 mt-1 uppercase tracking-wide">Sparten</div>
         </div>
         <div class="bg-white rounded-xl shadow p-5 text-center">
-          <div class="text-3xl font-bold text-purple-600">{{ totalSuperadmins }}</div>
-          <div class="text-xs text-gray-500 mt-1 uppercase tracking-wide">Superadmins</div>
+          <div class="text-3xl font-bold text-purple-600">{{ totalChapterAdmins }}</div>
+          <div class="text-xs text-gray-500 mt-1 uppercase tracking-wide">Chapter-Admins</div>
         </div>
         <div class="bg-white rounded-xl shadow p-5 text-center">
           <div class="text-3xl font-bold text-orange-500">{{ (org.orgAdmins||[]).length }}</div>
@@ -109,7 +110,7 @@
               <th class="px-5 py-3 text-left">ID</th>
               <th class="px-5 py-3 text-left">Name</th>
               <th class="px-5 py-3 text-left">Sparten</th>
-              <th class="px-5 py-3 text-left">Superadmins</th>
+              <th class="px-5 py-3 text-left">Chapter-Admins</th>
             </tr>
           </thead>
           <tbody>
@@ -117,7 +118,7 @@
               <td class="px-5 py-3 font-mono text-blue-700">{{ ch.id }}</td>
               <td class="px-5 py-3 font-medium">{{ ch.name }}</td>
               <td class="px-5 py-3 text-gray-500">{{ (ch.sparten||[]).map(s=>i18n.sparte(s)).join(', ') || '–' }}</td>
-              <td class="px-5 py-3 text-gray-500 font-mono">{{ (ch.superadmins||[]).join(', ') || '–' }}</td>
+              <td class="px-5 py-3 text-gray-500 font-mono">{{ (ch.admins||[]).join(', ') || '–' }}</td>
             </tr>
           </tbody>
         </table>
@@ -165,9 +166,9 @@ createApp({
       return all.size;
     });
 
-    const totalSuperadmins = computed(() => {
+    const totalChapterAdmins = computed(() => {
       const all = new Set();
-      (org.value.chaptersDetail||[]).forEach(ch => (ch.superadmins||[]).forEach(k => all.add(k)));
+      (org.value.chaptersDetail||[]).forEach(ch => (ch.admins||[]).forEach(k => all.add(k)));
       return all.size;
     });
 
@@ -210,7 +211,7 @@ createApp({
     }
 
     onMounted(load);
-    return { user, i18n, org, loading, editMode, editForm, saving, saveError, toast, totalSparten, totalSuperadmins, saveOrg };
+    return { user, i18n, org, loading, editMode, editForm, saving, saveError, toast, totalSparten, totalChapterAdmins, saveOrg };
   }
 }).mount('#app');
 </script>
