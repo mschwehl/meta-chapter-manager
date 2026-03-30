@@ -43,6 +43,7 @@
 </head>
 <body class="bg-gray-50 dark:bg-[#0f1117] h-screen overflow-hidden">
 <div id="app" v-cloak class="flex h-screen">
+  <mcm-notifications></mcm-notifications>
 
   <!-- ═══════════════ MAIN AREA ══════════════════════════════════ -->
   <div class="flex-1 flex flex-col min-w-0">
@@ -146,7 +147,7 @@
     <main class="flex-1 overflow-y-auto bg-gray-50/80 dark:bg-[#0f1117]">
 
       <!-- ════════ KONTEXT-AUSWAHL ════════ -->
-      <div v-if="mod === 'ctx'" class="min-h-full flex flex-col items-center justify-center p-6 gap-10">
+      <div v-if="mod === 'ctx'" class="min-h-full flex flex-col items-center p-6 pt-16 gap-10">
         <div class="w-full max-w-2xl">
           <div class="mb-8 text-center">
             <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-4 text-white text-lg font-bold shadow-sm" style="background:linear-gradient(135deg,#3b82f6,#6366f1)">{{ user.vorname?.[0] || '' }}{{ user.name?.[0] || '' }}</div>
@@ -221,7 +222,7 @@
       <user-admin       v-if="mod === 'useradmin'" @back="mod = 'dashboard'"></user-admin>
       <orga-admin       v-if="mod === 'orga'"></orga-admin>
       <docs-viewer      v-if="mod === 'dokumente'" @back="mod = 'dashboard'"></docs-viewer>
-      <user-settings    v-if="mod === 'settings'" @back="mod = 'dashboard'" @password-changed="mod = 'dashboard'"></user-settings>
+      <user-settings    v-if="mod === 'settings'" @back="mod = 'ctx'" @password-changed="onPasswordChanged"></user-settings>
       <system-info      v-if="mod === 'sysinfo'" @back="mod = 'dashboard'"></system-info>
 
     </main>
@@ -352,6 +353,11 @@
   .dark .status-freigegeben { background:#14532d; color:#4ade80; }
   .dark .status-abgelehnt   { background:#450a0a; color:#fca5a5; }
   .dark .status-default     { background:#1e2130; color:#94a3b8; }
+
+  /* Toast transitions */
+  .toast-enter-active, .toast-leave-active { transition: opacity .3s ease, transform .3s ease; }
+  .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(8px); }
+  .toast-move { transition: transform .3s ease; }
 </style>
 
 <!-- Vendor -->
@@ -361,6 +367,7 @@
 <script src="/lib/api-client.js"></script>
 
 <!-- Components -->
+<script src="/components/notifications.js"></script>
 <script src="/components/user-picker.js"></script>
 <script src="/components/status-badge.js"></script>
 <script src="/components/dashboard-view.js"></script>
@@ -379,15 +386,17 @@
 const { createApp, ref, reactive, computed, watch, onMounted, provide, nextTick } = Vue;
 
 const app = createApp({
+  components: { McmNotifications },
   setup() {
     // ── Auth guard ──
     let token = MCM_STORE.get('token');
     if (!token) { window.location.href = '/login.html?redirect=' + encodeURIComponent(window.location.pathname + window.location.search + window.location.hash); return {}; }
 
     const user = ref(JSON.parse(MCM_STORE.get('user') || '{}'));
-    const mustChange = new URLSearchParams(window.location.search).get('mustChange') === '1' || MCM_STORE.get('mustChange') === '1';
+    const mustChange = ref(new URLSearchParams(window.location.search).get('mustChange') === '1' || MCM_STORE.get('mustChange') === '1');
+    const notify = window.MCM_NOTIFY.notify;
     const i18n = MCM_I18N;
-    const mod = ref(mustChange ? 'settings' : 'ctx');
+    const mod = ref('ctx');
     const ctx = ref(null);
     const userMenu = ref(false);
     const appVersion = ref('');
@@ -420,6 +429,16 @@ const app = createApp({
       } catch { /* malformed token — ignore */ }
     }
     scheduleRefresh(token);
+
+    // ── Apply a freshly issued token (e.g. returned by PUT /api/chapters after a role change) ──
+    function applyNewToken(authData) {
+      if (!authData || !authData.token) return;
+      token = authData.token;
+      MCM_STORE.set('token', token);
+      MCM_STORE.set('user', JSON.stringify({ kuerzel: authData.kuerzel, name: authData.name, vorname: authData.vorname, roles: authData.roles, orgaAdmin: authData.orgaAdmin, zeitstelle: authData.zeitstelle }));
+      user.value = { kuerzel: authData.kuerzel, name: authData.name, vorname: authData.vorname, roles: authData.roles, orgaAdmin: authData.orgaAdmin || false, zeitstelle: authData.zeitstelle || false };
+      scheduleRefresh(token);
+    }
 
     fetch('/api/status').then(r => r.json()).then(d => {
       if (d.version) appVersion.value = d.version;
@@ -550,6 +569,12 @@ const app = createApp({
       return true;
     }
     function logout() { MCM_STORE.logout(); window.location.href = '/login.html'; }
+    function onPasswordChanged() {
+      mustChange.value = false;
+      MCM_STORE.remove('mustChange');
+      mod.value = 'ctx';
+      notify('Passwort erfolgreich geändert.', 'success');
+    }
 
     // ── Shared data (needed by multiple components) ──
     const prChapters = ref([]);
@@ -669,6 +694,8 @@ const app = createApp({
     provide('sseEvent', sseEvent);
     provide('darkMode', darkMode);
     provide('toggleDark', toggleDark);
+    provide('applyNewToken', applyNewToken);
+    provide('notify', notify);
 
     // ── Module switching: load shared data ──
     watch(mod, (m) => {
@@ -733,7 +760,15 @@ const app = createApp({
       }
     });
 
-    onMounted(() => { loadChapters(); loadOrg(); loadDirectory(); loadPendingCount(); });
+    onMounted(() => {
+      loadChapters(); loadOrg(); loadDirectory(); loadPendingCount();
+      if (mustChange.value) {
+        notify('Passwort noch nicht geändert – Sie verwenden noch das initiale Passwort.', 'warn', {
+          persistent: true,
+          action: { label: 'Jetzt ändern', fn: () => { mod.value = 'settings'; } },
+        });
+      }
+    });
 
     return {
       user, i18n, mod, visibleModules, currentModule,
@@ -744,6 +779,9 @@ const app = createApp({
       chapterDirectory, serverOnline, appVersion,
       darkMode, toggleDark, goHome,
       greetingText, greetingDate, pendingCount,
+      mustChange,
+      onPasswordChanged,
+      notify,
       branding: window.APP_BRANDING || {},
       ctxColor: (c) => ({ rose:'#f43f5e', amber:'#f59e0b', purple:'#9333ea', teal:'#0d9488', blue:'#3b82f6', gray:'#94a3b8' })[c] || '#3b82f6',
     };

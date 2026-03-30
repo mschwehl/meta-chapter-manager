@@ -12,7 +12,7 @@
 const ChapterManager = {
   name: 'ChapterManager',
   inject: ['api', 'apiPost', 'apiPut', 'i18n', 'user', 'ctx', 'isOrgaAdmin', 'isChapterAdminAnywhere',
-           'userNameCache', 'uPickSearch', 'uPickAdd', 'uPickRemove', 'uPickKeydown', 'isActive', 'sseEvent'],
+           'userNameCache', 'uPickSearch', 'uPickAdd', 'uPickRemove', 'uPickKeydown', 'isActive', 'sseEvent', 'applyNewToken'],
   emits: ['navigate'],
   data() {
     return {
@@ -132,6 +132,7 @@ const ChapterManager = {
           const r = await this.apiPost('/api/chapters', data); if (!r.ok) { this.chError = (await r.json()).error; return; }
         } else {
           const r = await this.apiPut(`/api/chapters/${data.id}`, data); if (!r.ok) { this.chError = (await r.json()).error; return; }
+          const saved = await r.json(); this.applyNewToken(saved._auth);
         }
         this.chEdit = null; this.loadChaptersList();
         if (this.chEditMode !== 'new') this.chSelected = data.id;
@@ -167,6 +168,7 @@ const ChapterManager = {
       try {
         const r = await this.apiPut(`/api/chapters/${chId}`, updated);
         if (!r.ok) { this.chSparteEditError = (await r.json()).error; return; }
+        const saved = await r.json(); this.applyNewToken(saved._auth);
         this.chSparteEdit = null;
         await this.loadChaptersList();
       } catch (e) { this.chSparteEditError = e.message; }
@@ -176,6 +178,7 @@ const ChapterManager = {
         const data = { ...ch, admins: [...this.chAdminPicker.list] };
         const r = await this.apiPut(`/api/chapters/${ch.id}`, data);
         if (!r.ok) { this.chAdminPicker.error = (await r.json()).error || 'Fehler'; return; }
+        const saved = await r.json(); this.applyNewToken(saved._auth);
         await this.loadChaptersList();
         const updated = this.chaptersList.find(c => c.id === ch.id);
         if (updated) this.chAdminPicker.list = [...(updated.admins || [])];

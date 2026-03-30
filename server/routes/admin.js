@@ -55,6 +55,7 @@ router.post('/users', requireOrgaAdmin, validateIds({ body: 'kuerzel' }), async 
   const kuerzel = (req.body.kuerzel || '').trim().toLowerCase();
   const name = (req.body.name || '').trim();
   const vorname = (req.body.vorname || '').trim();
+  const orgeinheit = (req.body.orgeinheit || '').trim();
   const kontakte = Array.isArray(req.body.kontakte)
     ? req.body.kontakte.map(k => ({ typ: String(k.typ || '').trim(), wert: String(k.wert || '').trim() })).filter(k => k.typ && k.wert)
     : [];
@@ -67,7 +68,7 @@ router.post('/users', requireOrgaAdmin, validateIds({ body: 'kuerzel' }), async 
     return res.status(409).json({ error: `KÃ¼rzel ${kuerzel} existiert bereits` });
   } catch { /* gut, existiert nicht */ }
 
-  const userData = { kuerzel, name: name || '', vorname: vorname || '', kontakte, chapters: [] };
+  const userData = { kuerzel, name: name || '', vorname: vorname || '', orgeinheit: orgeinheit || '', kontakte, chapters: [] };
   const filePath = path.join(DB_PATH, 'user', `${kuerzel}.json`);
   await writeJson(filePath, userData, `User angelegt: ${kuerzel}`, req.user.kuerzel);
 
@@ -95,6 +96,7 @@ router.put('/users/:kuerzel', validateIds({ param: 'kuerzel' }), async (req, res
   const updated = { ...existing };
   if (req.body.name !== undefined) updated.name = String(req.body.name).trim();
   if (req.body.vorname !== undefined) updated.vorname = String(req.body.vorname).trim();
+  if (req.body.orgeinheit !== undefined) updated.orgeinheit = String(req.body.orgeinheit).trim();
   if (req.body.kontakte !== undefined) {
     updated.kontakte = Array.isArray(req.body.kontakte)
       ? req.body.kontakte.map(k => ({ typ: String(k.typ || '').trim(), wert: String(k.wert || '').trim() })).filter(k => k.typ && k.wert)
@@ -122,8 +124,8 @@ router.post('/users/:kuerzel/chapter', validateIds({ param: 'kuerzel' }, { body:
     if (!canManageChapterSparte(req.user, chapterId, sparte)) return res.status(403).json({ error: 'Zugriff verweigert' });
   }
 
-  if (existing.chapters?.some(c => c.chapterId === chapterId && c.sparte === sparte)) {
-    return res.status(409).json({ error: 'Mitgliedschaft existiert bereits' });
+  if (existing.chapters?.some(c => c.chapterId === chapterId)) {
+    return res.status(409).json({ error: 'Person ist bereits Mitglied in diesem Chapter' });
   }
 
   existing.chapters = existing.chapters || [];
@@ -330,6 +332,7 @@ router.get('/export/users.xlsx', async (req, res) => {
     { header: 'Kürzel', key: 'kuerzel', width: 12 },
     { header: 'Nachname', key: 'name', width: 20 },
     { header: 'Vorname', key: 'vorname', width: 20 },
+    { header: 'Org.einheit', key: 'orgeinheit', width: 14 },
     { header: 'Kontakte', key: 'kontakte', width: 36 },
     { header: 'Chapter', key: 'chapter', width: 20 },
     { header: 'Sparte', key: 'sparte', width: 20 },
@@ -351,7 +354,7 @@ router.get('/export/users.xlsx', async (req, res) => {
       // User without (visible) memberships — still include once
       if (!allowedChapters) {
         const kontakteStr = (u.kontakte || []).map(k => `${k.typ}: ${k.wert}`).join(', ');
-        ws.addRow({ kuerzel: u.kuerzel, name: u.name || '', vorname: u.vorname || '', kontakte: kontakteStr, chapter: '', sparte: '', eintritt: '', austritt: '', austrittsgrund: '', status: '' });
+        ws.addRow({ kuerzel: u.kuerzel, name: u.name || '', vorname: u.vorname || '', orgeinheit: u.orgeinheit || '', kontakte: kontakteStr, chapter: '', sparte: '', eintritt: '', austritt: '', austrittsgrund: '', status: '' });
       }
     } else {
       const kontakteStr = (u.kontakte || []).map(k => `${k.typ}: ${k.wert}`).join(', ');
@@ -360,6 +363,7 @@ router.get('/export/users.xlsx', async (req, res) => {
           kuerzel: u.kuerzel,
           name: u.name || '',
           vorname: u.vorname || '',
+          orgeinheit: u.orgeinheit || '',
           kontakte: kontakteStr,
           chapter: chapterNames[m.chapterId] || m.chapterId,
           sparte: sparteNames[m.sparte] || m.sparte,

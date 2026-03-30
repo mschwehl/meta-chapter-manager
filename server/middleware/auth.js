@@ -1,7 +1,8 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config');
-const { getRevokedAt } = require('../lib/gitdb');
+const { getRevokedAt, readUser, readChapters, readOrganisation } = require('../lib/gitdb');
 const logger = require('../lib/logger');
+const { ROLE_LEVEL } = require('../../client/i18n.js');
 
 const JWT_SECRET = config.jwtSecret;
 
@@ -37,4 +38,38 @@ function authMiddleware(req, res, next) {
   }
 }
 
-module.exports = { authMiddleware, JWT_SECRET };
+module.exports = { authMiddleware, JWT_SECRET, buildTokenForUser };
+
+/**
+ * Build a fresh signed token for the given kuerzel, re-reading roles from disk.
+ * Returns { token, kuerzel, name, vorname, roles, orgaAdmin, zeitstelle }
+ * or null if the user no longer exists.
+ */
+async function buildTokenForUser(kuerzel) {
+  const user = await readUser(kuerzel).catch(() => null);
+  if (!user) return null;
+  const [chapters, org] = await Promise.all([
+    readChapters(),
+    readOrganisation().catch(() => ({ orgAdmins: [], zeitstelle: [] })),
+  ]);
+  const roles = {};
+  for (const chapter of chapters) {
+    const isChapterAdmin = (chapter.admins || []).includes(kuerzel);
+    const adminSparten = (chapter.sparten || [])
+      .filter(sp => (sp.admins || []).includes(kuerzel))
+      .map(sp => sp.id);
+    if (isChapterAdmin) {
+      roles[chapter.id] = { level: ROLE_LEVEL.CHAPTER, sparten: adminSparten };
+    } else if (adminSparten.length > 0) {
+      roles[chapter.id] = { level: ROLE_LEVEL.SPARTE, sparten: adminSparten };
+    }
+  }
+  const isOrgaAdmin = (org.orgAdmins || []).includes(kuerzel);
+  const isZeitstelle = (org.zeitstelle || []).includes(kuerzel);
+  const token = jwt.sign(
+    { kuerzel, name: user.name || kuerzel, vorname: user.vorname || '', roles, orgaAdmin: isOrgaAdmin, zeitstelle: isZeitstelle },
+    JWT_SECRET,
+    { expiresIn: '8h' }
+  );
+  return { token, kuerzel, name: user.name || kuerzel, vorname: user.vorname || '', roles, orgaAdmin: isOrgaAdmin, zeitstelle: isZeitstelle };
+}

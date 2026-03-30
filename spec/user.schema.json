@@ -20,6 +20,10 @@
       "type": "string",
       "description": "Vorname"
     },
+    "orgeinheit": {
+      "type": "string",
+      "description": "Organisationseinheit (z.B. Y34)"
+    },
     "chapters": {
       "type": "array",
       "description": "Mitgliedschaften in Chapters und Sparten",

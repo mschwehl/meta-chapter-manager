@@ -17,7 +17,7 @@ const UserAdmin = {
       filter: '',
       selected: null,
       creating: false,
-      form: { kuerzel: '', name: '', vorname: '', kontakte: [] },
+      form: { kuerzel: '', name: '', vorname: '', orgeinheit: '', kontakte: [] },
       edit: null,
       error: '',
       sortBy: 'kuerzel',
@@ -88,12 +88,12 @@ const UserAdmin = {
     startCreate() {
       this.selected = null;
       this.creating = true;
-      this.form = { kuerzel: '', name: '', vorname: '', kontakte: [] };
+      this.form = { kuerzel: '', name: '', vorname: '', orgeinheit: '', kontakte: [] };
       this.error = '';
     },
     startEdit() {
       if (!this.selected) return;
-      this.edit = { name: this.selected.name, vorname: this.selected.vorname, kontakte: JSON.parse(JSON.stringify(this.selected.kontakte || [])) };
+      this.edit = { name: this.selected.name, vorname: this.selected.vorname, orgeinheit: this.selected.orgeinheit || '', kontakte: JSON.parse(JSON.stringify(this.selected.kontakte || [])) };
       this.error = '';
     },
     async createUser() {
@@ -256,6 +256,10 @@ const UserAdmin = {
               </div>
             </div>
             <div>
+              <label class="lbl">Organisationseinheit</label>
+              <input v-model="form.orgeinheit" class="ctrl" placeholder="z.B. 22E" />
+            </div>
+            <div>
               <label class="lbl">Kontakte</label>
               <div v-for="(k, idx) in form.kontakte" :key="idx" class="mb-2 p-2 border border-gray-100 rounded-lg bg-gray-50 dark:bg-[#1a1d27] dark:border-[#2d3148]">
                 <div class="flex items-center gap-2 mb-1">
@@ -297,6 +301,7 @@ const UserAdmin = {
               <div>
                 <div class="font-semibold text-gray-800 text-sm">{{ selected.vorname }} {{ selected.name }}</div>
                 <div class="font-mono text-[11px] text-gray-400">{{ selected.kuerzel }}</div>
+                <div v-if="selected.orgeinheit" class="text-[11px] text-gray-400">OE: {{ selected.orgeinheit }}</div>
                 <div v-if="selected.kontakte && selected.kontakte.length" class="text-[11px] text-gray-400">
                   <div v-for="k in selected.kontakte" :key="k.typ + k.wert">{{ k.typ }}: {{ k.wert }}</div>
                 </div>
@@ -326,6 +331,10 @@ const UserAdmin = {
             <div class="grid grid-cols-2 gap-4">
               <div><label class="lbl">Nachname</label><input v-model="edit.name" class="ctrl" /></div>
               <div><label class="lbl">Vorname</label><input v-model="edit.vorname" class="ctrl" /></div>
+            </div>
+            <div>
+              <label class="lbl">Organisationseinheit</label>
+              <input v-model="edit.orgeinheit" class="ctrl" placeholder="z.B. 22E" />
             </div>
             <div>
               <label class="lbl">Kontakte</label>

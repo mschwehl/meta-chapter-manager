@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const { readChapters, readChapter, readOrganisation, writeChapter, writeJson, DB_PATH, invalidateUserToken, deleteChapterDir } = require('../lib/gitdb');
 const { requireChapterAdmin, requireOrgaAdmin } = require('../middleware/roles');
+const { buildTokenForUser } = require('../middleware/auth');
 const { validateIds } = require('../lib/validate');
 
 const router = express.Router();
@@ -97,7 +98,14 @@ router.put('/:id', requireChapterAdmin('id'), validateIds({ param: 'id' }), asyn
     for (const k of new Set([...oldAdmins, ...newAdmins])) {
       if (oldAdmins.has(k) !== newAdmins.has(k)) await invalidateUserToken(k);
     }
-    res.json(chapter);
+    // If the current user's own roles in this chapter may have changed (they are
+    // in the old or new admin set), issue a fresh token so the client can continue
+    // without a forced re-login and sees the updated roles immediately.
+    const selfInvolved = oldAdmins.has(req.user.kuerzel) || newAdmins.has(req.user.kuerzel);
+    const selfAuth = selfInvolved ? await buildTokenForUser(req.user.kuerzel) : null;
+    const response = { ...chapter };
+    if (selfAuth) response._auth = selfAuth;
+    res.json(response);
   } catch {
     res.status(404).json({ error: 'Chapter nicht gefunden' });
   }
