@@ -155,6 +155,41 @@ Regardless of whether a data repo was provided or not, the server ensures a boot
 
 ---
 
+## CSV Import Example (Users)
+
+In **Benutzerverwaltung → Neuer Benutzer → CSV-Import**, you can paste CSV with `;` or `,` as delimiter.
+
+Supported columns:
+
+- `kuerzel` (optional if e-mail is present)
+- `vorname`
+- `name`
+- `orgeinheit` (department / referat)
+- `email`
+
+Example (`;` separated):
+
+```csv
+kuerzel;vorname;name;orgeinheit;email
+m123;Max;Mustermann;12B;max.mustermann@firma.de
+n234;Nina;Neumann;81G;nina.neumann@firma.de
+```
+
+Example (`,` separated):
+
+```csv
+kuerzel,vorname,name,orgeinheit,email
+m123,Max,Mustermann,12B,max.mustermann@firma.de
+n234,Nina,Neumann,81G,nina.neumann@firma.de
+```
+
+Notes:
+
+- If `kuerzel` is empty, it is derived from the e-mail local-part.
+- Imported e-mail addresses are stored as contact type `email` with attribute `business`.
+
+---
+
 ## Data Repository Layout
 
 ```

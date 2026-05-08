@@ -75,9 +75,41 @@ const MemberManager = {
       if (r?.level === ROLE_LEVEL.SPARTE) return all.filter(s => (r.sparten||[]).includes(s.id));
       return [];
     },
+    normalizeContactsForForm(kontakte) {
+      return JSON.parse(JSON.stringify(kontakte || [])).map(k => {
+        if (k.typ === 'email' && !['private', 'business'].includes(k.attribut)) {
+          k.attribut = 'private';
+        }
+        return k;
+      });
+    },
+    onContactTypeChange(k) {
+      if (!k) return;
+      if (k.typ === 'email') {
+        if (!['private', 'business'].includes(k.attribut)) k.attribut = 'private';
+      } else if (k.attribut !== undefined) {
+        delete k.attribut;
+      }
+    },
+    sanitizeKontakteForSubmit(kontakte) {
+      return (kontakte || []).map(k => {
+        const typ = String(k.typ || '').trim();
+        const wert = String(k.wert || '').trim();
+        const kontakt = { typ, wert };
+        if (typ === 'email' && ['private', 'business'].includes(k.attribut)) {
+          kontakt.attribut = k.attribut;
+        }
+        return kontakt;
+      });
+    },
+    contactDisplay(k) {
+      if (!k || !k.typ || !k.wert) return '';
+      if (k.typ === 'email' && k.attribut) return `${k.typ} (${k.attribut}): ${k.wert}`;
+      return `${k.typ}: ${k.wert}`;
+    },
     canEditChapter(cid) { return this.isOrgaAdmin || (this.user.roles || {})[cid]?.level === ROLE_LEVEL.CHAPTER; },
     select(u) { this.selected = u; this.edit = null; this.error = ''; this.chapterError = ''; },
-    startEdit(u) { this.edit = { name: u.name, vorname: u.vorname, kontakte: JSON.parse(JSON.stringify(u.kontakte || [])) }; this.error = ''; },
+    startEdit(u) { this.edit = { name: u.name, vorname: u.vorname, kontakte: this.normalizeContactsForForm(u.kontakte) }; this.error = ''; },
     async load() {
       this.loading = true;
       try { const p = this.chapter ? `?chapterId=${this.chapter}` : ''; const r = await this.api(`/api/admin/users${p}`); this.members = await r.json(); } catch {} finally { this.loading = false; }
@@ -86,7 +118,8 @@ const MemberManager = {
     async saveEdit() {
       this.error = '';
       try {
-        const r = await this.apiPut(`/api/admin/users/${this.selected.kuerzel}`, this.edit);
+        const payload = { ...this.edit, kontakte: this.sanitizeKontakteForSubmit(this.edit.kontakte) };
+        const r = await this.apiPut(`/api/admin/users/${this.selected.kuerzel}`, payload);
         if (!r.ok) { this.error = (await r.json()).error; return; }
         const updated = await r.json();
         this.edit = null;
@@ -243,8 +276,9 @@ const MemberManager = {
             <div>
               <h2 class="text-lg font-bold text-gray-800">{{ selected.vorname }} {{ selected.name }}</h2>
               <span class="font-mono text-xs text-gray-400">{{ selected.kuerzel }}</span>
+              <div class="text-xs text-gray-500">Referat: {{ selected.orgeinheit || '–' }}</div>
               <div v-if="selected.kontakte && selected.kontakte.length" class="text-xs text-gray-400">
-                <div v-for="k in selected.kontakte" :key="k.typ + k.wert">{{ k.typ }}: {{ k.wert }}</div>
+                <div v-for="k in selected.kontakte" :key="k.typ + k.wert + (k.attribut || '')">{{ contactDisplay(k) }}</div>
               </div>
             </div>
             <div v-if="isChapterAdminAnywhere" class="flex flex-wrap gap-2 items-center">
@@ -263,16 +297,20 @@ const MemberManager = {
               <label class="lbl">Kontakte</label>
               <div v-for="(k, idx) in edit.kontakte" :key="idx" class="mb-2 p-2 border border-gray-100 rounded-lg bg-gray-50 dark:bg-[#1a1d27] dark:border-[#2d3148]">
                 <div class="flex items-center gap-2 mb-1">
-                  <select v-model="k.typ" class="ctrl text-xs flex-1">
+                  <select v-model="k.typ" @change="onContactTypeChange(k)" class="ctrl text-xs flex-1">
                     <option value="email">E-Mail</option>
                     <option value="telefon">Telefon</option>
                     <option value="postadresse">Postadresse</option>
+                  </select>
+                  <select v-if="k.typ === 'email'" v-model="k.attribut" class="ctrl text-xs w-32">
+                    <option value="private">Privat</option>
+                    <option value="business">Geschäftlich</option>
                   </select>
                   <button @click="edit.kontakte.splice(idx, 1)" type="button" class="text-red-400 hover:text-red-600 text-xs px-1">✕</button>
                 </div>
                 <input v-model="k.wert" class="ctrl" :placeholder="k.typ === 'email' ? 'max@example.de' : k.typ === 'telefon' ? '+49 …' : 'Straße, PLZ Ort'" />
               </div>
-              <button @click="edit.kontakte.push({ typ: 'email', wert: '' })" type="button" class="text-blue-600 hover:text-blue-800 text-xs font-medium mt-1">+ Kontakt hinzufügen</button>
+              <button @click="edit.kontakte.push({ typ: 'email', wert: '', attribut: 'private' })" type="button" class="text-blue-600 hover:text-blue-800 text-xs font-medium mt-1">+ Kontakt hinzufügen</button>
             </div>
             <div v-if="error" class="mb-3 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">{{ error }}</div>
             <div class="flex gap-2">

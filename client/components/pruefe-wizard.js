@@ -49,6 +49,7 @@ const PruefeWizard = {
   watch: {
     initChapterId(v) { if (v) { this.event.chapterId = v; this.onChapterChange(); } },
     initSparteId(v)  { if (v) this.event.sparte = v; },
+    step(v) { if (v === 3) this.ensureParticipantTimes(); },
   },
   mounted() {
     if (this.event.chapterId) this.onChapterChange();
@@ -58,6 +59,16 @@ const PruefeWizard = {
       this.event.sparte = this.initSparteId || '';
       const ch = this.prChapters.find(c => c.id === this.event.chapterId);
       this.sparten = ch?.sparten || [];
+    },
+    formatDateDe(iso) {
+      if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso || '';
+      const [y, m, d] = iso.split('-');
+      return `${d}.${m}.${y}`;
+    },
+    normalizeTimeValue(value, fallback) {
+      const v = String(value || '').trim();
+      if (/^([01]\d|2[0-3]):[0-5]\d$/.test(v)) return v;
+      return String(fallback || '').trim();
     },
     uploadPdf(e) { const f = e.target.files[0]; if (f) this.processPdf(f); },
     onDrop(e) { this.dragOver = false; const f = e.dataTransfer.files[0]; if (f?.type === 'application/pdf') this.processPdf(f); else this.uploadError = 'Nur PDF.'; },
@@ -93,9 +104,52 @@ const PruefeWizard = {
     },
     confirm(u) {
       if (this.validation(u).blocked) return;
-      if (!this.matched.find(m => m.kuerzel === u.kuerzel)) this.matched.push(u);
+      if (!this.matched.find(m => m.kuerzel === u.kuerzel)) {
+        this.matched.push({
+          ...u,
+          zeitVon: this.event.von,
+          zeitBis: this.event.bis,
+        });
+      }
       this.search = ''; this.results = []; this.resultsIdx = -1;
       this.$nextTick(() => this.$refs.searchRef?.focus());
+    },
+    ensureParticipantTimes() {
+      this.matched = this.matched.map(p => ({
+        ...p,
+        zeitVon: this.normalizeTimeValue(p.zeitVon, this.event.von),
+        zeitBis: this.normalizeTimeValue(p.zeitBis, this.event.bis),
+      }));
+    },
+    copyTimesFromPrevious(index) {
+      if (index < 1) return;
+      const prev = this.matched[index - 1];
+      const cur = this.matched[index];
+      if (!prev || !cur) return;
+      cur.zeitVon = this.normalizeTimeValue(prev.zeitVon, this.event.von);
+      cur.zeitBis = this.normalizeTimeValue(prev.zeitBis, this.event.bis);
+    },
+    copyEventTimesToAll() {
+      this.matched.forEach(p => {
+        p.zeitVon = this.event.von;
+        p.zeitBis = this.event.bis;
+      });
+    },
+    copyTimesFromFirst() {
+      if (this.matched.length < 2) return;
+      const first = this.matched[0];
+      const von = this.normalizeTimeValue(first.zeitVon, this.event.von);
+      const bis = this.normalizeTimeValue(first.zeitBis, this.event.bis);
+      this.matched.slice(1).forEach(p => {
+        p.zeitVon = von;
+        p.zeitBis = bis;
+      });
+    },
+    participantBusinessEmail(p) {
+      const kontakte = p?.kontakte || [];
+      const business = kontakte.find(k => k.typ === 'email' && String(k.attribut || '').toLowerCase() === 'business');
+      const fallback = kontakte.find(k => k.typ === 'email');
+      return String((business || fallback)?.wert || '').trim();
     },
     remove(p) { this.matched = this.matched.filter(m => m.kuerzel !== p.kuerzel); },
     memberChapter(u) {
@@ -134,17 +188,48 @@ const PruefeWizard = {
     },
     async downloadWord() { await this.generateWord(); if (!this.downloadErr) this.wordDownloaded = true; },
     openMailto() {
+      this.ensureParticipantTimes();
       const orgEmails = this.org?.emails || {};
       const zeitstelleEmail = orgEmails.zeitstelle || '';
       const domain = orgEmails.domain || '';
-      const ccEmail = domain ? `${this.user.kuerzel}@${domain}` : '';
+      const ownCcEmail = domain ? `${this.user.kuerzel}@${domain}` : '';
       const ev = this.event;
-      const subject = encodeURIComponent(`Freigabe: ${this.i18n.chapter(ev.chapterId)} – ${this.i18n.sparte(ev.sparte)} – ${ev.datum}`);
-      const names = this.matched.map((p, i) => `${i+1}. ${p.vorname} ${p.name} (${p.kuerzel})`).join('\n');
-      const attachList = [this.pdfUrl ? '\u2022 Unterschriftenliste (PDF)' : '', '\u2022 Freigabeliste (Word)'].filter(Boolean).join('\n');
-      const body = encodeURIComponent(`Freigabeliste\n\nChapter: ${this.i18n.chapter(ev.chapterId)}\nSparte: ${this.i18n.sparte(ev.sparte)}\nDatum: ${ev.datum}\nUhrzeit: ${ev.von} – ${ev.bis}\nOrt: ${ev.ort || '–'}\n\nTeilnehmer (${this.matched.length}):\n${names}\n\nSpartenleiter: ${this.user.vorname} ${this.user.name} (${this.user.kuerzel})\n\n--- Anhänge ---\nBitte fügen Sie die heruntergeladenen Dateien an:\n${attachList}`);
+      const chapterName = this.i18n.chapter(ev.chapterId);
+      const sparteName = this.i18n.sparte(ev.sparte);
+      const subject = encodeURIComponent(`Zeitgutschrift für ${chapterName} ${sparteName}`);
+
+      const bodyLines = [
+        `Sportgruppe: ${chapterName}`,
+        `Sportart: ${sparteName}`,
+        `Datum: ${this.formatDateDe(ev.datum)}`,
+        '',
+        'Vorname',
+        'Name',
+        'Referat',
+        'Von',
+        'Bis',
+      ];
+
+      this.matched.forEach((p) => {
+        bodyLines.push(
+          p.vorname || '',
+          p.name || '',
+          p.orgeinheit || '',
+          this.normalizeTimeValue(p.zeitVon, ev.von),
+          this.normalizeTimeValue(p.zeitBis, ev.bis),
+        );
+      });
+
+      const body = encodeURIComponent(bodyLines.join('\n'));
       let href = `mailto:${zeitstelleEmail}?subject=${subject}&body=${body}`;
-      if (ccEmail) href += `&cc=${ccEmail}`;
+      const ccList = [];
+      if (ownCcEmail) ccList.push(ownCcEmail);
+      this.matched.forEach((p) => {
+        const mail = this.participantBusinessEmail(p);
+        if (mail) ccList.push(mail);
+      });
+      const cc = [...new Set(ccList.map(m => m.trim()).filter(Boolean))];
+      if (cc.length) href += `&cc=${encodeURIComponent(cc.join(';'))}`;
       const a = document.createElement('a'); a.href = href; document.body.appendChild(a); a.click(); a.remove();
     },
     reset() {
@@ -280,6 +365,7 @@ const PruefeWizard = {
                 <th class="px-4 py-2 text-left w-8">#</th>
                 <th class="px-4 py-2 text-left">Name</th>
                 <th class="px-4 py-2 text-left">Kürzel</th>
+                <th class="px-4 py-2 text-left">Referat</th>
                 <th class="px-4 py-2 text-left">Chapter</th>
                 <th class="px-4 py-2 text-left">Sparte</th>
                 <th class="px-4 py-2 text-left">Mitgliedschaft</th>
@@ -294,6 +380,7 @@ const PruefeWizard = {
                 <td class="px-4 py-2 text-gray-400 text-xs">{{ pi + 1 }}</td>
                 <td class="px-4 py-2 font-medium text-gray-800">{{ p.vorname }} {{ p.name }}</td>
                 <td class="px-4 py-2 font-mono text-gray-500 text-xs">{{ p.kuerzel }}</td>
+                <td class="px-4 py-2 text-gray-500 text-xs">{{ p.orgeinheit || '–' }}</td>
                 <td class="px-4 py-2 text-gray-600 text-xs">{{ memberChapter(p) ? i18n.chapter(memberChapter(p).chapterId) : '–' }}</td>
                 <td class="px-4 py-2 text-gray-600 text-xs">{{ memberChapter(p) ? i18n.sparte(memberChapter(p).sparte) : '–' }}</td>
                 <td class="px-4 py-2"><span :class="validation(p).cls" class="px-2 py-0.5 rounded-full text-[11px] font-semibold">{{ validation(p).label }}</span></td>
@@ -325,12 +412,18 @@ const PruefeWizard = {
       <div v-if="matched.some(p => !validation(p).ok)" class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-800">
         ⚠️ Einige Teilnehmer haben keine aktive Mitgliedschaft im gewählten Chapter/Sparte.
       </div>
+      <div class="mb-3 flex flex-wrap items-center gap-2">
+        <button @click="copyEventTimesToAll" class="btn-sec text-xs">Eventzeit auf alle anwenden</button>
+        <button @click="copyTimesFromFirst" :disabled="matched.length < 2" class="btn-sec text-xs disabled:opacity-40 disabled:cursor-not-allowed">1. Zeitzeile auf alle kopieren</button>
+      </div>
       <table class="w-full text-xs mb-6">
         <thead class="bg-blue-700 text-white"><tr>
           <th class="px-3 py-2 text-left">Nr.</th><th class="px-3 py-2 text-left">Kürzel</th>
           <th class="px-3 py-2 text-left">Name</th><th class="px-3 py-2 text-left">Vorname</th>
-          <th class="px-3 py-2 text-left">Chapter</th><th class="px-3 py-2 text-left">Sparte</th>
-          <th class="px-3 py-2 text-left">Mitgliedschaft</th>
+          <th class="px-3 py-2 text-left">Referat</th><th class="px-3 py-2 text-left">Von</th>
+          <th class="px-3 py-2 text-left">Bis</th><th class="px-3 py-2 text-left">Chapter</th>
+          <th class="px-3 py-2 text-left">Sparte</th><th class="px-3 py-2 text-left">Mitgliedschaft</th>
+          <th class="px-3 py-2 text-left">Kopieren</th>
         </tr></thead>
         <tbody>
           <tr v-for="(p, i) in matched" :key="p.kuerzel"
@@ -339,9 +432,15 @@ const PruefeWizard = {
             <td class="px-3 py-1.5 font-mono text-gray-600">{{ p.kuerzel }}</td>
             <td class="px-3 py-1.5">{{ p.name }}</td>
             <td class="px-3 py-1.5">{{ p.vorname }}</td>
+            <td class="px-3 py-1.5 text-gray-600">{{ p.orgeinheit || '–' }}</td>
+            <td class="px-3 py-1.5"><input v-model="p.zeitVon" type="time" step="60" class="ctrl text-xs py-1 px-2 w-28" /></td>
+            <td class="px-3 py-1.5"><input v-model="p.zeitBis" type="time" step="60" class="ctrl text-xs py-1 px-2 w-28" /></td>
             <td class="px-3 py-1.5 text-gray-600">{{ memberChapter(p) ? i18n.chapter(memberChapter(p).chapterId) : '–' }}</td>
             <td class="px-3 py-1.5 text-gray-600">{{ memberChapter(p) ? i18n.sparte(memberChapter(p).sparte) : '–' }}</td>
             <td class="px-3 py-1.5"><span :class="validation(p).cls" class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold">{{ validation(p).label }}</span></td>
+            <td class="px-3 py-1.5">
+              <button @click="copyTimesFromPrevious(i)" :disabled="i === 0" class="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">↑ von oben</button>
+            </td>
           </tr>
         </tbody>
       </table>

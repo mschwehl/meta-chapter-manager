@@ -59,6 +59,31 @@
         },
         "additionalProperties": false
       }
+    },
+    "kontakte": {
+      "type": "array",
+      "description": "Optionale Kontaktdaten der Person",
+      "items": {
+        "type": "object",
+        "required": ["typ", "wert"],
+        "properties": {
+          "typ": {
+            "type": "string",
+            "enum": ["email", "telefon", "postadresse"],
+            "description": "Art des Kontakts"
+          },
+          "wert": {
+            "type": "string",
+            "description": "Kontaktwert, z.B. E-Mail-Adresse oder Telefonnummer"
+          },
+          "attribut": {
+            "type": "string",
+            "enum": ["private", "business"],
+            "description": "Optionales Attribut für E-Mail-Kontakte"
+          }
+        },
+        "additionalProperties": false
+      }
     }
   },
   "additionalProperties": false

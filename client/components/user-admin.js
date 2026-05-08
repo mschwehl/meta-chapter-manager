@@ -18,6 +18,9 @@ const UserAdmin = {
       selected: null,
       creating: false,
       form: { kuerzel: '', name: '', vorname: '', orgeinheit: '', kontakte: [] },
+      importCsv: '',
+      importingCsv: false,
+      importSummary: '',
       edit: null,
       error: '',
       sortBy: 'kuerzel',
@@ -79,6 +82,178 @@ const UserAdmin = {
       if (this.sortBy !== key) return '↕';
       return this.sortAsc ? '↑' : '↓';
     },
+    normalizeContactsForForm(kontakte) {
+      return JSON.parse(JSON.stringify(kontakte || [])).map(k => {
+        if (k.typ === 'email' && !['private', 'business'].includes(k.attribut)) {
+          k.attribut = 'private';
+        }
+        return k;
+      });
+    },
+    onContactTypeChange(k) {
+      if (!k) return;
+      if (k.typ === 'email') {
+        if (!['private', 'business'].includes(k.attribut)) k.attribut = 'private';
+      } else if (k.attribut !== undefined) {
+        delete k.attribut;
+      }
+    },
+    sanitizeKontakteForSubmit(kontakte) {
+      return (kontakte || []).map(k => {
+        const typ = String(k.typ || '').trim();
+        const wert = String(k.wert || '').trim();
+        const kontakt = { typ, wert };
+        if (typ === 'email' && ['private', 'business'].includes(k.attribut)) {
+          kontakt.attribut = k.attribut;
+        }
+        return kontakt;
+      });
+    },
+    contactDisplay(k) {
+      if (!k || !k.typ || !k.wert) return '';
+      if (k.typ === 'email' && k.attribut) return `${k.typ} (${k.attribut}): ${k.wert}`;
+      return `${k.typ}: ${k.wert}`;
+    },
+    detectCsvDelimiter(line) {
+      const candidates = [';', ',', '\t'];
+      let best = ';';
+      let bestCount = -1;
+      for (const c of candidates) {
+        const count = (line.split(c).length - 1);
+        if (count > bestCount) {
+          best = c;
+          bestCount = count;
+        }
+      }
+      return best;
+    },
+    parseCsvRow(line, delimiter) {
+      const out = [];
+      let cell = '';
+      let quoted = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (quoted && line[i + 1] === '"') {
+            cell += '"';
+            i++;
+          } else {
+            quoted = !quoted;
+          }
+          continue;
+        }
+        if (ch === delimiter && !quoted) {
+          out.push(cell.trim());
+          cell = '';
+          continue;
+        }
+        cell += ch;
+      }
+      out.push(cell.trim());
+      return out;
+    },
+    normalizeCsvHeader(raw) {
+      const key = String(raw || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
+      if (['kuerzel', 'kürzel', 'kurzel', 'username', 'login', 'user'].includes(key)) return 'kuerzel';
+      if (['vorname', 'firstname', 'givenname', 'first'].includes(key)) return 'vorname';
+      if (['name', 'nachname', 'surname', 'lastname', 'familienname', 'last'].includes(key)) return 'name';
+      if (['orgeinheit', 'organisationseinheit', 'orgunit', 'oe', 'abteilung', 'department', 'referat'].includes(key)) return 'orgeinheit';
+      if (['email', 'emailadresse', 'emailaddress', 'mail', 'businessmail', 'dienstmail'].includes(key)) return 'email';
+      return key;
+    },
+    parseCsvUsers(csvText) {
+      const lines = String(csvText || '')
+        .split(/\r?\n/)
+        .map(l => l.trim())
+        .filter(Boolean);
+      if (!lines.length) return [];
+
+      const delimiter = this.detectCsvDelimiter(lines[0]);
+      const parsed = lines.map(line => this.parseCsvRow(line, delimiter));
+      const headerCandidate = (parsed[0] || []).map(h => this.normalizeCsvHeader(h));
+      const known = new Set(['kuerzel', 'vorname', 'name', 'orgeinheit', 'email']);
+      const hasHeader = headerCandidate.filter(h => known.has(h)).length >= 2;
+
+      const headers = hasHeader ? headerCandidate : ['kuerzel', 'vorname', 'name', 'orgeinheit', 'email'];
+      const dataRows = hasHeader ? parsed.slice(1) : parsed;
+      const lineOffset = hasHeader ? 2 : 1;
+
+      return dataRows.map((cells, idx) => {
+        const row = { __line: lineOffset + idx };
+        headers.forEach((h, i) => { row[h] = String(cells[i] || '').trim(); });
+        return row;
+      });
+    },
+    deriveKuerzelFromEmail(email, lineNo) {
+      let local = String(email || '').split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (!local) local = `u${lineNo}`;
+      if (!/^[a-z]/.test(local)) local = `u${local}`;
+      if (local.length < 4) local = `${local}${'0000'.slice(0, 4 - local.length)}`;
+      return local.slice(0, 5);
+    },
+    buildImportPayload(row) {
+      const email = String(row.email || '').trim();
+      let kuerzel = String(row.kuerzel || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (!kuerzel && email) kuerzel = this.deriveKuerzelFromEmail(email, row.__line || 0);
+      return {
+        kuerzel,
+        vorname: String(row.vorname || '').trim(),
+        name: String(row.name || '').trim(),
+        orgeinheit: String(row.orgeinheit || '').trim(),
+        kontakte: email ? [{ typ: 'email', wert: email, attribut: 'business' }] : [],
+      };
+    },
+    async importUsersFromCsv() {
+      this.error = '';
+      this.importSummary = '';
+      const rows = this.parseCsvUsers(this.importCsv);
+      if (!rows.length) {
+        this.error = 'Bitte CSV-Inhalt einfügen.';
+        return;
+      }
+
+      const seen = new Set();
+      const created = [];
+      const failed = [];
+      this.importingCsv = true;
+
+      for (const row of rows) {
+        const payload = this.buildImportPayload(row);
+        const line = row.__line || '?';
+
+        if (!payload.kuerzel) {
+          failed.push(`Zeile ${line}: Kürzel fehlt (oder kann nicht aus E-Mail erzeugt werden).`);
+          continue;
+        }
+        if (!/^[a-z][a-z0-9]{3,4}$/.test(payload.kuerzel)) {
+          failed.push(`Zeile ${line}: Ungültiges Kürzel "${payload.kuerzel}" (4–5 Zeichen, beginnt mit Buchstabe).`);
+          continue;
+        }
+        if (seen.has(payload.kuerzel)) {
+          failed.push(`Zeile ${line}: Kürzel "${payload.kuerzel}" doppelt im CSV.`);
+          continue;
+        }
+        seen.add(payload.kuerzel);
+
+        try {
+          const r = await this.apiPost('/api/admin/users', payload);
+          if (!r.ok) {
+            const d = await r.json().catch(() => ({}));
+            failed.push(`Zeile ${line}: ${d.error || 'Import fehlgeschlagen'}`);
+            continue;
+          }
+          created.push(payload.kuerzel);
+        } catch (e) {
+          failed.push(`Zeile ${line}: ${e.message}`);
+        }
+      }
+
+      this.importingCsv = false;
+      await this.load();
+      this.importSummary = `${created.length} Benutzer importiert.${failed.length ? ` ${failed.length} Fehler.` : ''}`;
+      if (failed.length) this.error = failed.slice(0, 8).join('\n');
+      if (created.length && !failed.length) this.importCsv = '';
+    },
     select(u) {
       this.selected = u;
       this.creating = false;
@@ -89,11 +264,18 @@ const UserAdmin = {
       this.selected = null;
       this.creating = true;
       this.form = { kuerzel: '', name: '', vorname: '', orgeinheit: '', kontakte: [] };
+      this.importCsv = '';
+      this.importSummary = '';
       this.error = '';
     },
     startEdit() {
       if (!this.selected) return;
-      this.edit = { name: this.selected.name, vorname: this.selected.vorname, orgeinheit: this.selected.orgeinheit || '', kontakte: JSON.parse(JSON.stringify(this.selected.kontakte || [])) };
+      this.edit = {
+        name: this.selected.name,
+        vorname: this.selected.vorname,
+        orgeinheit: this.selected.orgeinheit || '',
+        kontakte: this.normalizeContactsForForm(this.selected.kontakte)
+      };
       this.error = '';
     },
     async createUser() {
@@ -101,7 +283,8 @@ const UserAdmin = {
       if (!this.kuerzelValid) { this.error = 'Kürzel muss 4–5 Zeichen haben (a–z und Ziffern, beginnt mit Buchstabe)'; return; }
       if (this.kuerzelTaken) { this.error = `Kürzel "${this.form.kuerzel}" ist bereits vergeben`; return; }
       try {
-        const r = await this.apiPost('/api/admin/users', this.form);
+        const payload = { ...this.form, kontakte: this.sanitizeKontakteForSubmit(this.form.kontakte) };
+        const r = await this.apiPost('/api/admin/users', payload);
         if (!r.ok) { this.error = (await r.json()).error; return; }
         const created = await r.json();
         this.creating = false;
@@ -112,7 +295,8 @@ const UserAdmin = {
     async saveEdit() {
       this.error = '';
       try {
-        const r = await this.apiPut(`/api/admin/users/${this.selected.kuerzel}`, this.edit);
+        const payload = { ...this.edit, kontakte: this.sanitizeKontakteForSubmit(this.edit.kontakte) };
+        const r = await this.apiPut(`/api/admin/users/${this.selected.kuerzel}`, payload);
         if (!r.ok) { this.error = (await r.json()).error; return; }
         const updated = await r.json();
         this.edit = null;
@@ -187,6 +371,9 @@ const UserAdmin = {
               <th class="px-4 py-2 text-left cursor-pointer hover:text-gray-700" @click="toggleSort('vorname')">
                 Vorname <span class="text-[9px]">{{ sortIcon('vorname') }}</span>
               </th>
+              <th class="px-4 py-2 text-left cursor-pointer hover:text-gray-700" @click="toggleSort('orgeinheit')">
+                Referat <span class="text-[9px]">{{ sortIcon('orgeinheit') }}</span>
+              </th>
               <th class="px-4 py-2 text-center">Mitgl.</th>
             </tr>
           </thead>
@@ -197,6 +384,7 @@ const UserAdmin = {
               <td class="px-4 py-2.5 font-mono text-xs text-gray-600">{{ u.kuerzel }}</td>
               <td class="px-4 py-2.5 text-gray-800">{{ u.name || '–' }}</td>
               <td class="px-4 py-2.5 text-gray-600">{{ u.vorname || '–' }}</td>
+              <td class="px-4 py-2.5 text-gray-500 text-xs">{{ u.orgeinheit || '–' }}</td>
               <td class="px-4 py-2.5 text-center">
                 <span v-if="chapterCount(u)" class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700">{{ chapterCount(u) }}</span>
                 <span v-else class="text-gray-300 text-xs">–</span>
@@ -247,12 +435,12 @@ const UserAdmin = {
                 <p v-if="kuerzelTaken" class="mt-1 text-[10px] text-red-500 font-semibold">⚠ Dieses Kürzel ist bereits vergeben!</p>
               </div>
               <div>
-                <label class="lbl">Nachname</label>
-                <input v-model="form.name" class="ctrl" />
-              </div>
-              <div>
                 <label class="lbl">Vorname</label>
                 <input v-model="form.vorname" class="ctrl" />
+              </div>
+              <div>
+                <label class="lbl">Nachname</label>
+                <input v-model="form.name" class="ctrl" />
               </div>
             </div>
             <div>
@@ -263,19 +451,34 @@ const UserAdmin = {
               <label class="lbl">Kontakte</label>
               <div v-for="(k, idx) in form.kontakte" :key="idx" class="mb-2 p-2 border border-gray-100 rounded-lg bg-gray-50 dark:bg-[#1a1d27] dark:border-[#2d3148]">
                 <div class="flex items-center gap-2 mb-1">
-                  <select v-model="k.typ" class="ctrl text-xs flex-1">
+                  <select v-model="k.typ" @change="onContactTypeChange(k)" class="ctrl text-xs flex-1">
                     <option value="email">E-Mail</option>
                     <option value="telefon">Telefon</option>
                     <option value="postadresse">Postadresse</option>
+                  </select>
+                  <select v-if="k.typ === 'email'" v-model="k.attribut" class="ctrl text-xs w-32">
+                    <option value="private">Privat</option>
+                    <option value="business">Geschäftlich</option>
                   </select>
                   <button @click="form.kontakte.splice(idx, 1)" type="button" class="text-red-400 hover:text-red-600 text-xs px-1">✕</button>
                 </div>
                 <input v-model="k.wert" class="ctrl" :placeholder="k.typ === 'email' ? 'max@example.de' : k.typ === 'telefon' ? '+49 …' : 'Straße, PLZ Ort'" />
               </div>
-              <button @click="form.kontakte.push({ typ: 'email', wert: '' })" type="button" class="text-blue-600 hover:text-blue-800 text-xs font-medium mt-1">+ Kontakt hinzufügen</button>
+              <button @click="form.kontakte.push({ typ: 'email', wert: '', attribut: 'private' })" type="button" class="text-blue-600 hover:text-blue-800 text-xs font-medium mt-1">+ Kontakt hinzufügen</button>
+            </div>
+            <div class="pt-3 border-t border-gray-100">
+              <label class="lbl">CSV-Import (mehrere Benutzer)</label>
+              <p class="text-[11px] text-gray-500 mb-2">Header unterstützt z.B.: <span class="font-mono">kuerzel;vorname;name;orgeinheit;email</span>. E-Mail aus CSV wird als <b>business</b> gespeichert.</p>
+              <textarea v-model="importCsv" rows="6" class="ctrl text-xs font-mono" placeholder="kuerzel;vorname;name;orgeinheit;email&#10;m123;Max;Mustermann;12B;max.mustermann@firma.de"></textarea>
+              <div class="mt-2 flex items-center gap-2">
+                <button @click="importUsersFromCsv" :disabled="importingCsv || !importCsv.trim()" class="btn-sec text-xs disabled:opacity-40 disabled:cursor-not-allowed">
+                  {{ importingCsv ? 'Importiere …' : 'CSV importieren' }}
+                </button>
+                <span v-if="importSummary" class="text-[11px] text-green-700 bg-green-50 border border-green-200 px-2 py-1 rounded">{{ importSummary }}</span>
+              </div>
             </div>
             <p class="text-gray-400 text-xs">Initial-Passwort = Kürzel (muss beim ersten Login geändert werden).</p>
-            <div v-if="error" class="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs">{{ error }}</div>
+            <div v-if="error" class="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs whitespace-pre-line">{{ error }}</div>
             <div class="flex gap-2">
               <button @click="createUser" :disabled="!kuerzelValid || kuerzelTaken || !form.name"
                 class="btn-sm disabled:opacity-40 disabled:cursor-not-allowed">Anlegen</button>
@@ -303,7 +506,7 @@ const UserAdmin = {
                 <div class="font-mono text-[11px] text-gray-400">{{ selected.kuerzel }}</div>
                 <div v-if="selected.orgeinheit" class="text-[11px] text-gray-400">OE: {{ selected.orgeinheit }}</div>
                 <div v-if="selected.kontakte && selected.kontakte.length" class="text-[11px] text-gray-400">
-                  <div v-for="k in selected.kontakte" :key="k.typ + k.wert">{{ k.typ }}: {{ k.wert }}</div>
+                  <div v-for="k in selected.kontakte" :key="k.typ + k.wert + (k.attribut || '')">{{ contactDisplay(k) }}</div>
                 </div>
                 <!-- Org-Admin badge -->
                 <span v-if="orgAdmins.includes(selected.kuerzel)"
@@ -340,16 +543,20 @@ const UserAdmin = {
               <label class="lbl">Kontakte</label>
               <div v-for="(k, idx) in edit.kontakte" :key="idx" class="mb-2 p-2 border border-gray-100 rounded-lg bg-gray-50 dark:bg-[#1a1d27] dark:border-[#2d3148]">
                 <div class="flex items-center gap-2 mb-1">
-                  <select v-model="k.typ" class="ctrl text-xs flex-1">
+                  <select v-model="k.typ" @change="onContactTypeChange(k)" class="ctrl text-xs flex-1">
                     <option value="email">E-Mail</option>
                     <option value="telefon">Telefon</option>
                     <option value="postadresse">Postadresse</option>
+                  </select>
+                  <select v-if="k.typ === 'email'" v-model="k.attribut" class="ctrl text-xs w-32">
+                    <option value="private">Privat</option>
+                    <option value="business">Geschäftlich</option>
                   </select>
                   <button @click="edit.kontakte.splice(idx, 1)" type="button" class="text-red-400 hover:text-red-600 text-xs px-1">✕</button>
                 </div>
                 <input v-model="k.wert" class="ctrl" :placeholder="k.typ === 'email' ? 'max@example.de' : k.typ === 'telefon' ? '+49 …' : 'Straße, PLZ Ort'" />
               </div>
-              <button @click="edit.kontakte.push({ typ: 'email', wert: '' })" type="button" class="text-blue-600 hover:text-blue-800 text-xs font-medium mt-1">+ Kontakt hinzufügen</button>
+              <button @click="edit.kontakte.push({ typ: 'email', wert: '', attribut: 'private' })" type="button" class="text-blue-600 hover:text-blue-800 text-xs font-medium mt-1">+ Kontakt hinzufügen</button>
             </div>
             <div v-if="error" class="p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">{{ error }}</div>
             <div class="flex gap-2">

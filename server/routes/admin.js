@@ -13,6 +13,33 @@ const { validateIds } = require('../lib/validate');
 
 const router = express.Router();
 
+const EMAIL_ATTRIBUTES = new Set(['private', 'business']);
+
+function normalizeKontakte(kontakte) {
+  if (!Array.isArray(kontakte)) return [];
+  return kontakte
+    .map((k = {}) => {
+      const typ = String(k.typ || '').trim();
+      const wert = String(k.wert || '').trim();
+      if (!typ || !wert) return null;
+      const kontakt = { typ, wert };
+      if (typ === 'email') {
+        const attribut = String(k.attribut || '').trim().toLowerCase();
+        if (EMAIL_ATTRIBUTES.has(attribut)) kontakt.attribut = attribut;
+      }
+      return kontakt;
+    })
+    .filter(Boolean);
+}
+
+function formatKontakt(kontakt) {
+  if (!kontakt || !kontakt.typ || !kontakt.wert) return '';
+  if (kontakt.typ === 'email' && kontakt.attribut) {
+    return `${kontakt.typ} (${kontakt.attribut}): ${kontakt.wert}`;
+  }
+  return `${kontakt.typ}: ${kontakt.wert}`;
+}
+
 // GET /api/admin/users?chapterId=nsk
 router.get('/users', async (req, res) => {
   const { chapterId } = req.query;
@@ -56,9 +83,7 @@ router.post('/users', requireOrgaAdmin, validateIds({ body: 'kuerzel' }), async 
   const name = (req.body.name || '').trim();
   const vorname = (req.body.vorname || '').trim();
   const orgeinheit = (req.body.orgeinheit || '').trim();
-  const kontakte = Array.isArray(req.body.kontakte)
-    ? req.body.kontakte.map(k => ({ typ: String(k.typ || '').trim(), wert: String(k.wert || '').trim() })).filter(k => k.typ && k.wert)
-    : [];
+  const kontakte = normalizeKontakte(req.body.kontakte);
   if (!kuerzel) return res.status(400).json({ error: 'Kürzel erforderlich' });
   if (!/^[a-z][a-z0-9]{3,4}$/.test(kuerzel)) return res.status(400).json({ error: 'Kürzel muss 4–5 Zeichen haben (Buchstaben a–z und Ziffern, beginnt mit Buchstabe)' });
 
@@ -98,9 +123,7 @@ router.put('/users/:kuerzel', validateIds({ param: 'kuerzel' }), async (req, res
   if (req.body.vorname !== undefined) updated.vorname = String(req.body.vorname).trim();
   if (req.body.orgeinheit !== undefined) updated.orgeinheit = String(req.body.orgeinheit).trim();
   if (req.body.kontakte !== undefined) {
-    updated.kontakte = Array.isArray(req.body.kontakte)
-      ? req.body.kontakte.map(k => ({ typ: String(k.typ || '').trim(), wert: String(k.wert || '').trim() })).filter(k => k.typ && k.wert)
-      : [];
+    updated.kontakte = normalizeKontakte(req.body.kontakte);
   }
 
   const filePath = path.join(DB_PATH, 'user', `${kuerzel}.json`);
@@ -353,11 +376,11 @@ router.get('/export/users.xlsx', async (req, res) => {
     if (memberships.length === 0) {
       // User without (visible) memberships — still include once
       if (!allowedChapters) {
-        const kontakteStr = (u.kontakte || []).map(k => `${k.typ}: ${k.wert}`).join(', ');
+        const kontakteStr = (u.kontakte || []).map(formatKontakt).filter(Boolean).join(', ');
         ws.addRow({ kuerzel: u.kuerzel, name: u.name || '', vorname: u.vorname || '', orgeinheit: u.orgeinheit || '', kontakte: kontakteStr, chapter: '', sparte: '', eintritt: '', austritt: '', austrittsgrund: '', status: '' });
       }
     } else {
-      const kontakteStr = (u.kontakte || []).map(k => `${k.typ}: ${k.wert}`).join(', ');
+      const kontakteStr = (u.kontakte || []).map(formatKontakt).filter(Boolean).join(', ');
       for (const m of memberships) {
         ws.addRow({
           kuerzel: u.kuerzel,
