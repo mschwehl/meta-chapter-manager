@@ -91,9 +91,10 @@ router.post('/login', loginLimiter, async (req, res) => {
 
   const displayName = user.name || kuerzel;
   const displayVorname = user.vorname || '';
+  const displayOrgeinheit = user.orgeinheit || '';
 
   const token = jwt.sign(
-    { kuerzel, name: displayName, vorname: displayVorname, roles, orgaAdmin: isOrgaAdmin, zeitstelle: isZeitstelle },
+    { kuerzel, name: displayName, vorname: displayVorname, orgeinheit: displayOrgeinheit, roles, orgaAdmin: isOrgaAdmin, zeitstelle: isZeitstelle },
     JWT_SECRET,
     { expiresIn: '8h' }
   );
@@ -103,6 +104,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     kuerzel,
     name: displayName,
     vorname: displayVorname,
+    orgeinheit: displayOrgeinheit,
     roles,
     orgaAdmin: isOrgaAdmin,
     zeitstelle: isZeitstelle,
@@ -173,7 +175,7 @@ router.post('/refresh', authMiddleware, async (req, res) => {
   const credential = await getCredential(kuerzel);
 
   const token = jwt.sign(
-    { kuerzel, name: user.name || kuerzel, vorname: user.vorname || '', roles, orgaAdmin: isOrgaAdmin, zeitstelle: isZeitstelle },
+    { kuerzel, name: user.name || kuerzel, vorname: user.vorname || '', orgeinheit: user.orgeinheit || '', roles, orgaAdmin: isOrgaAdmin, zeitstelle: isZeitstelle },
     JWT_SECRET,
     { expiresIn: '8h' }
   );
@@ -184,6 +186,7 @@ router.post('/refresh', authMiddleware, async (req, res) => {
     kuerzel,
     name: user.name || kuerzel,
     vorname: user.vorname || '',
+    orgeinheit: user.orgeinheit || '',
     roles,
     orgaAdmin: isOrgaAdmin,
     zeitstelle: isZeitstelle,

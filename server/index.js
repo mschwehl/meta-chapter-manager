@@ -19,10 +19,13 @@ const sse = require('./lib/sse');
 const { version: APP_VERSION } = require('./package.json');
 const logger = require('./lib/logger');
 const jwt = require('jsonwebtoken');
+const swaggerUiDist = require('swagger-ui-dist');
 
 const rateLimit = require('express-rate-limit');
 
 const app = express();
+const OPENAPI_SPEC_FILE = path.join(__dirname, '../spec/openapi.yaml');
+const OPENAPI_UI_DIST_DIR = swaggerUiDist.getAbsoluteFSPath();
 
 app.use(cors({ origin: config.corsOrigin || false }));
 app.use(express.json({ limit: '100kb' }));
@@ -53,6 +56,46 @@ app.get('/api/status', async (_req, res) => {
   let orgName = null;
   try { const org = await readOrganisation(); orgName = org.name || null; } catch { /* db may not be ready yet */ }
   res.json({ orgName, version: APP_VERSION });
+});
+
+// Public local Swagger UI static assets (offline-friendly)
+app.use('/api/openapi-assets', express.static(OPENAPI_UI_DIST_DIR));
+
+// GET /api/openapi.yaml – public OpenAPI document
+app.get('/api/openapi.yaml', (req, res) => {
+  res.type('application/yaml');
+  res.sendFile(OPENAPI_SPEC_FILE, err => {
+    if (err && !res.headersSent) res.status(404).json({ error: 'OpenAPI specification not found' });
+  });
+});
+
+// GET /api/openapi – public Swagger UI (local assets)
+app.get('/api/openapi', (_req, res) => {
+  res.type('html').send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MetaChapterManager OpenAPI</title>
+  <link rel="stylesheet" href="/api/openapi-assets/swagger-ui.css" />
+  <style>
+    html, body { margin: 0; padding: 0; }
+    body { background: #f6f8fb; }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="/api/openapi-assets/swagger-ui-bundle.js"></script>
+  <script>
+    window.ui = SwaggerUIBundle({
+      url: '/api/openapi.yaml',
+      dom_id: '#swagger-ui',
+      deepLinking: true,
+      docExpansion: 'none'
+    });
+  </script>
+</body>
+</html>`);
 });
 
 // GET /api/sse – Server-Sent Events stream (token via query param)
@@ -98,7 +141,7 @@ app.get('/api/me', authMiddleware, async (req, res) => {
     // Merge JWT-derived flags so the client keeps orgaAdmin / zeitstelle / roles
     res.json({ ...u, orgaAdmin: req.user.orgaAdmin || false, zeitstelle: req.user.zeitstelle || false, roles: req.user.roles || {} });
   } catch {
-    res.json({ kuerzel: req.user.kuerzel, name: req.user.name, vorname: req.user.vorname, chapters: [], orgaAdmin: req.user.orgaAdmin || false, zeitstelle: req.user.zeitstelle || false, roles: req.user.roles || {} });
+    res.json({ kuerzel: req.user.kuerzel, name: req.user.name, vorname: req.user.vorname, orgeinheit: req.user.orgeinheit || '', chapters: [], orgaAdmin: req.user.orgaAdmin || false, zeitstelle: req.user.zeitstelle || false, roles: req.user.roles || {} });
   }
 });
 

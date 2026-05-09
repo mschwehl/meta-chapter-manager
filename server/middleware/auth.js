@@ -67,9 +67,9 @@ async function buildTokenForUser(kuerzel) {
   const isOrgaAdmin = (org.orgAdmins || []).includes(kuerzel);
   const isZeitstelle = (org.zeitstelle || []).includes(kuerzel);
   const token = jwt.sign(
-    { kuerzel, name: user.name || kuerzel, vorname: user.vorname || '', roles, orgaAdmin: isOrgaAdmin, zeitstelle: isZeitstelle },
+      { kuerzel, name: user.name || kuerzel, vorname: user.vorname || '', orgeinheit: user.orgeinheit || '', roles, orgaAdmin: isOrgaAdmin, zeitstelle: isZeitstelle },
     JWT_SECRET,
     { expiresIn: '8h' }
   );
-  return { token, kuerzel, name: user.name || kuerzel, vorname: user.vorname || '', roles, orgaAdmin: isOrgaAdmin, zeitstelle: isZeitstelle };
+    return { token, kuerzel, name: user.name || kuerzel, vorname: user.vorname || '', orgeinheit: user.orgeinheit || '', roles, orgaAdmin: isOrgaAdmin, zeitstelle: isZeitstelle };
 }

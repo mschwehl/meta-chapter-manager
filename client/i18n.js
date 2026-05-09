@@ -43,7 +43,7 @@ const MCM_TRANSLATIONS = {
 
   /* ── Rollen ───────────────────────────────────────────────────── */
   roles: {
-    chapteradmin:  'Chapter-Admin',
+    chapteradmin:  'Verband-Admin',
     spartenadmin:  'Spartenadmin',
     user:          'Mitglied'
   },
@@ -61,7 +61,7 @@ const MCM_TRANSLATIONS = {
     sparte:          'Sparte',
     beitritt:        'Beitrittsdatum',
     status:          'Status',
-    chapterId:       'Chapter',
+    chapterId:       'Verband',
     datum:           'Datum',
     von:             'Von',
     bis:             'Bis',
@@ -72,7 +72,7 @@ const MCM_TRANSLATIONS = {
     erstelltAm:      'Erstellt am',
     freigaben:       'Freigaben',
     kommentar:       'Kommentar',
-    admins:          'Chapter-Admins',
+    admins:          'Verband-Admins',
     spartenadmins:   'Spartenadmins',
     sparten:         'Sparten'
   }

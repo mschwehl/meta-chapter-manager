@@ -183,7 +183,7 @@
 
         <!-- Chapter directory (only for plain members — users with no admin roles) -->
         <div v-if="chapterDirectory.length && !isOrgaAdmin && !isZeitstelle && !hasAnyChapterRole" class="w-full max-w-2xl">
-          <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 text-center">Verfügbare Chapter</h2>
+          <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 text-center">Verfügbare Verbände</h2>
           <div class="space-y-3">
             <div v-for="ch in chapterDirectory" :key="ch.id"
               class="bg-white dark:bg-[#1a1d27] rounded-xl border border-gray-200/80 dark:border-[#2d3148] p-5">
@@ -421,8 +421,8 @@ const app = createApp({
             const data = await r.json();
             token = data.token;
             MCM_STORE.set('token', token);
-            MCM_STORE.set('user', JSON.stringify({ kuerzel: data.kuerzel, name: data.name, vorname: data.vorname, roles: data.roles, orgaAdmin: data.orgaAdmin, zeitstelle: data.zeitstelle }));
-            user.value = { kuerzel: data.kuerzel, name: data.name, vorname: data.vorname, roles: data.roles, orgaAdmin: data.orgaAdmin || false, zeitstelle: data.zeitstelle || false };
+            MCM_STORE.set('user', JSON.stringify({ kuerzel: data.kuerzel, name: data.name, vorname: data.vorname, orgeinheit: data.orgeinheit || '', roles: data.roles, orgaAdmin: data.orgaAdmin, zeitstelle: data.zeitstelle }));
+            user.value = { kuerzel: data.kuerzel, name: data.name, vorname: data.vorname, orgeinheit: data.orgeinheit || '', roles: data.roles, orgaAdmin: data.orgaAdmin || false, zeitstelle: data.zeitstelle || false };
             scheduleRefresh(token);
           } catch { /* network error — will retry on next request returning 401 */ }
         }, refreshIn);
@@ -435,8 +435,8 @@ const app = createApp({
       if (!authData || !authData.token) return;
       token = authData.token;
       MCM_STORE.set('token', token);
-      MCM_STORE.set('user', JSON.stringify({ kuerzel: authData.kuerzel, name: authData.name, vorname: authData.vorname, roles: authData.roles, orgaAdmin: authData.orgaAdmin, zeitstelle: authData.zeitstelle }));
-      user.value = { kuerzel: authData.kuerzel, name: authData.name, vorname: authData.vorname, roles: authData.roles, orgaAdmin: authData.orgaAdmin || false, zeitstelle: authData.zeitstelle || false };
+      MCM_STORE.set('user', JSON.stringify({ kuerzel: authData.kuerzel, name: authData.name, vorname: authData.vorname, orgeinheit: authData.orgeinheit || '', roles: authData.roles, orgaAdmin: authData.orgaAdmin, zeitstelle: authData.zeitstelle }));
+      user.value = { kuerzel: authData.kuerzel, name: authData.name, vorname: authData.vorname, orgeinheit: authData.orgeinheit || '', roles: authData.roles, orgaAdmin: authData.orgaAdmin || false, zeitstelle: authData.zeitstelle || false };
       scheduleRefresh(token);
     }
 
@@ -477,7 +477,7 @@ const app = createApp({
       { id: 'pruefe',     icon: '📋', label: 'Prüfe Veranstaltung' },
       { id: 'events',     icon: '📅', label: 'Veranstaltungen' },
       { id: 'members',    icon: '👥', label: 'Mitglieder',    need: 'orga' },
-      { id: 'chapters',   icon: '🏢', label: 'Chapter',       need: 'super' },
+      { id: 'chapters',   icon: '🏢', label: 'Verband',       need: 'super' },
       { id: 'orga',       icon: '🏛', label: 'Organisation',  need: 'orga' },
       { id: 'dokumente',  icon: '📂', label: 'Dokumente',     need: 'zeit' },
       { id: 'settings',   icon: '⚙️', label: 'Einstellungen' },
@@ -590,6 +590,15 @@ const app = createApp({
     }
     async function loadDirectory() {
       try { const r = await api('/api/chapters/directory'); chapterDirectory.value = await r.json(); } catch {}
+    }
+    async function loadMe() {
+      try {
+        const r = await api('/api/me');
+        if (!r.ok) return;
+        const me = await r.json();
+        user.value = { ...user.value, ...me };
+        MCM_STORE.set('user', JSON.stringify(user.value));
+      } catch {}
     }
 
     // ── User-picker helpers (shared via provide) ──
@@ -708,12 +717,12 @@ const app = createApp({
       const opts = [];
       const roles = user.value.roles || {};
       if (isOrgaAdmin.value)
-        opts.push({ type: 'orgadmin', label: 'Meine Organisation', role: 'Organisations-Admin', detail: null, icon: '🏛', desc: 'Chapters, Benutzer, Anfragen und Organisation verwalten', color: 'rose' });
+        opts.push({ type: 'orgadmin', label: 'Meine Organisation', role: 'Organisations-Admin', detail: null, icon: '🏛', desc: 'Verbände, Benutzer, Anfragen und Organisation verwalten', color: 'rose' });
       if (isZeitstelle.value)
         opts.push({ type: 'zeitstelle', label: 'Freigaben & Dokumente', role: 'Zeitstelle', detail: null, icon: '⏱', desc: 'Freigabelisten prüfen und Dokumente verwalten', color: 'amber' });
       for (const [cid, role] of Object.entries(roles)) {
         if (role.level === ROLE_LEVEL.CHAPTER) {
-          opts.push({ type: 'chapteradmin', chapterId: cid, label: i18n.chapter(cid), role: 'Chapter-Admin', detail: null, icon: '🏢', desc: 'Mitglieder verwalten, Eintritt und Austritt erfassen', color: 'purple' });
+          opts.push({ type: 'chapteradmin', chapterId: cid, label: i18n.chapter(cid), role: 'Verband-Admin', detail: null, icon: '🏢', desc: 'Mitglieder verwalten, Eintritt und Austritt erfassen', color: 'purple' });
           for (const sp of (role.sparten || []))
             opts.push({ type: 'spartenadmin', chapterId: cid, sparteId: sp, label: i18n.sparte(sp), role: 'Spartenadmin', detail: i18n.chapter(cid), icon: '🏓', desc: 'Sparte verwalten, Freigabeliste und Zeitkorrektur', color: 'teal' });
         } else if (role.level === ROLE_LEVEL.SPARTE) {
@@ -761,6 +770,7 @@ const app = createApp({
     });
 
     onMounted(() => {
+      loadMe();
       loadChapters(); loadOrg(); loadDirectory(); loadPendingCount();
       if (mustChange.value) {
         notify('Passwort noch nicht geändert – Sie verwenden noch das initiale Passwort.', 'warn', {

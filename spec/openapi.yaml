@@ -1,0 +1,294 @@
+openapi: 3.1.0
+info:
+  title: MetaChapterManager API
+  version: 1.0.0
+  description: |
+    OpenAPI for selected endpoints.
+    Focus: global user pool operations (create/update profile), not chapter memberships.
+servers:
+  - url: http://localhost:3000
+
+tags:
+  - name: Auth
+    description: Authentication and token issuance
+  - name: GlobalUsers
+    description: Global user pool profile management
+
+paths:
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login and get JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              kuerzel: admin
+              password: admin
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/admin/users:
+    post:
+      tags: [GlobalUsers]
+      summary: Create global user profile
+      description: Creates a user in the global pool with chapters set to an empty list.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGlobalUserRequest'
+            example:
+              kuerzel: m123
+              vorname: Max
+              name: Mustermann
+              orgeinheit: 12B
+              kontakte:
+                - typ: email
+                  attribut: business
+                  wert: max.mustermann@example.org
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (requires orga admin)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/admin/users/{kuerzel}:
+    put:
+      tags: [GlobalUsers]
+      summary: Update global user profile
+      description: Updates only profile data. No chapter membership changes.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: kuerzel
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z0-9][a-z0-9-]{0,63}$'
+          description: Existing user identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGlobalUserRequest'
+            example:
+              vorname: Max
+              name: Mustermann
+              orgeinheit: 81G
+              kontakte:
+                - typ: email
+                  attribut: business
+                  wert: max.mustermann@example.org
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        kuerzel:
+          type: string
+        password:
+          type: string
+      required: [kuerzel, password]
+
+    LoginResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        token:
+          type: string
+        kuerzel:
+          type: string
+        name:
+          type: string
+        vorname:
+          type: string
+        orgeinheit:
+          type: string
+        roles:
+          type: object
+          additionalProperties: true
+        orgaAdmin:
+          type: boolean
+        zeitstelle:
+          type: boolean
+        mustChangePassword:
+          type: boolean
+      required: [token, kuerzel]
+
+    Kontakt:
+      type: object
+      additionalProperties: false
+      properties:
+        typ:
+          type: string
+          example: email
+        attribut:
+          type: string
+          enum: [private, business]
+        wert:
+          type: string
+      required: [typ, wert]
+
+    CreateGlobalUserRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        kuerzel:
+          type: string
+          pattern: '^[a-z][a-z0-9]{3,4}$'
+          description: 4-5 chars, starts with a letter.
+        vorname:
+          type: string
+        name:
+          type: string
+        orgeinheit:
+          type: string
+        kontakte:
+          type: array
+          items:
+            $ref: '#/components/schemas/Kontakt'
+      required: [kuerzel]
+
+    UpdateGlobalUserRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        vorname:
+          type: string
+        name:
+          type: string
+        orgeinheit:
+          type: string
+        kontakte:
+          type: array
+          items:
+            $ref: '#/components/schemas/Kontakt'
+
+    ChapterMembership:
+      type: object
+      additionalProperties: true
+      properties:
+        chapterId:
+          type: string
+        sparte:
+          type: string
+        eintrittsdatum:
+          type: string
+          format: date
+          nullable: true
+        austrittsdatum:
+          type: string
+          format: date
+          nullable: true
+        status:
+          type: string
+
+    User:
+      type: object
+      additionalProperties: true
+      properties:
+        kuerzel:
+          type: string
+        vorname:
+          type: string
+        name:
+          type: string
+        orgeinheit:
+          type: string
+        kontakte:
+          type: array
+          items:
+            $ref: '#/components/schemas/Kontakt'
+        chapters:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChapterMembership'
+      required: [kuerzel]

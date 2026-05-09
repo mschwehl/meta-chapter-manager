@@ -21,13 +21,13 @@ const DashboardView = {
       const type = this.ctx?.type;
       const s = this.stats;
       if (type === 'orgadmin') {
-        t.push({ id: 'chapters', icon: '\uD83C\uDFE2', label: 'Chapter', desc: 'Chapter verwalten, Sparten & Admins', color: 'blue', badge: s.chapters, badgeColor: 'text-blue-600' });
+        t.push({ id: 'chapters', icon: '\uD83C\uDFE2', label: 'Verband', desc: 'Verband verwalten, Sparten & Admins', color: 'blue', badge: s.chapters, badgeColor: 'text-blue-600' });
         t.push({ id: 'useradmin', icon: '\uD83D\uDC65', label: 'Benutzer', desc: 'Benutzerpool verwalten, anlegen & bearbeiten', color: 'indigo', badge: s.mitglieder, badgeColor: 'text-indigo-600' });
         t.push({ id: 'sysinfo', icon: '\u2699\uFE0F', label: 'System & Git', desc: 'Server-Info, Git-Status & Datenbank', color: 'gray' });
         t.push({ id: 'settings', icon: '\uD83D\uDD27', label: 'Einstellungen', desc: 'Passwort \u00e4ndern & Darstellung', color: 'slate' });
       }
       if (type === 'chapteradmin') {
-        t.push({ id: 'chapters', icon: '\uD83C\uDFE2', label: 'Mein Chapter', desc: 'Mitglieder, Sparten & Einstellungen', color: 'purple' });
+        t.push({ id: 'chapters', icon: '\uD83C\uDFE2', label: 'Mein Verband', desc: 'Mitglieder, Sparten & Einstellungen', color: 'purple' });
         t.push({ id: 'events', icon: '\uD83D\uDCC5', label: 'Veranstaltungen', desc: 'Termine anlegen und verwalten', color: 'green', badge: s.offeneEvents, badgeLabel: 'offen', badgeColor: 'text-green-600' });
         t.push({ id: 'settings', icon: '\uD83D\uDD27', label: 'Einstellungen', desc: 'Passwort & Darstellung', color: 'slate' });
       }
@@ -127,7 +127,7 @@ const DashboardView = {
       <thead class="text-gray-500 dark:text-gray-400 text-xs uppercase bg-gray-50 dark:bg-[#13151d]">
         <tr>
           <th class="px-5 py-2 text-left">Datum</th>
-          <th class="px-5 py-2 text-left">Chapter</th>
+          <th class="px-5 py-2 text-left">Verband</th>
           <th class="px-5 py-2 text-left">Sparte</th>
           <th class="px-5 py-2 text-left">Ort</th>
           <th class="px-5 py-2 text-left">Status</th>

@@ -4,7 +4,7 @@
  * Props:
  *   picker       - reactive object { search, results, list, activeIdx }
  *   nameCache    - reactive object mapping kuerzel → display name
- *   placeholder  - input placeholder text (default: "Kürzel oder Name suchen …")
+ *   placeholder  - input placeholder text (default: "Kürzel, Name oder Organisationseinheit suchen …")
  *   color        - chip color theme: 'blue' | 'purple' | 'rose' (default: 'blue')
  *   size         - 'sm' | 'md' (default: 'sm') — affects chip/input/dropdown sizing
  *   emptyText    - optional text when list is empty (hidden if falsy)
@@ -18,7 +18,7 @@ const UserPicker = {
   props: {
     picker:      { type: Object, required: true },
     nameCache:   { type: Object, required: true },
-    placeholder: { type: String, default: 'Kürzel oder Name suchen …' },
+    placeholder: { type: String, default: 'Kürzel, Name oder Organisationseinheit suchen …' },
     color:       { type: String, default: 'blue' },
     size:        { type: String, default: 'sm' },
     emptyText:   { type: String, default: '' },
@@ -85,9 +85,12 @@ const UserPicker = {
         :class="picker.list.includes(u.kuerzel) ? 'pick-disabled' : idx === picker.activeIdx ? 'pick-highlight' : ''"
         class="flex items-center justify-between px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0"
         :style="false">
-        <span :class="dropCls">
-          <span class="font-semibold">{{ u.vorname }} {{ u.name }}</span>
-          <span class="font-mono text-gray-400">({{ u.kuerzel }})</span>
+        <span :class="[dropCls, 'flex flex-col']">
+          <span>
+            <span class="font-semibold">{{ u.vorname }} {{ u.name }}</span>
+            <span class="font-mono text-gray-400">({{ u.kuerzel }})</span>
+          </span>
+          <span v-if="u.orgeinheit" class="text-[10px] text-gray-400">OE: {{ u.orgeinheit }}</span>
         </span>
         <span class="text-green-600 font-bold">+</span>
       </div>

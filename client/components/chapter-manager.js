@@ -425,11 +425,11 @@ const ChapterManager = {
     <!-- Chapter cards -->
     <div>
       <div class="flex items-center justify-between mb-1">
-        <span class="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Chapter</span>
-        <button v-if="isOrgaAdmin" @click="chInitNew()" class="btn-sm">+ Neues Chapter</button>
+        <span class="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Verband</span>
+        <button v-if="isOrgaAdmin" @click="chInitNew()" class="btn-sm">+ Neuer Verband</button>
       </div>
       <hr class="border-gray-200 mb-4" />
-      <div v-if="!chaptersList.length" class="text-center text-gray-400 text-sm py-10">Keine Chapter vorhanden.</div>
+      <div v-if="!chaptersList.length" class="text-center text-gray-400 text-sm py-10">Keine Verbände vorhanden.</div>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <button v-for="ch in chaptersList" :key="ch.id"
           @click="chSelected = ch.id; chSelectedSparte = null; chMbToggle(ch.id)"
@@ -514,7 +514,7 @@ const ChapterManager = {
           <span v-if="!orgAdmins.length" class="text-gray-400 text-xs">Keine Organisations-Admins hinterlegt</span>
         </div>
         <user-picker :picker="orgAdminPicker" :name-cache="userNameCache"
-          placeholder="Kürzel oder Name suchen …"
+          placeholder="Kürzel, Name oder Organisationseinheit suchen …"
           :search-fn="uPickSearch" :add-fn="uPickAdd" :remove-fn="uPickRemove" :keydown-fn="uPickKeydown" />
         <div v-if="orgAdminError" class="mt-2 text-red-600 text-xs">{{ orgAdminError }}</div>
         <div class="mt-3 flex gap-2">
@@ -530,12 +530,12 @@ const ChapterManager = {
     <div class="flex items-center gap-3 mb-4">
       <button @click="chEdit = null" class="btn-back"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>Zurück</button>
       <span class="text-gray-300">/</span>
-      <span class="text-sm font-semibold text-gray-700">{{ chEditMode === 'new' ? 'Neues Chapter' : 'Chapter bearbeiten' }}</span>
+      <span class="text-sm font-semibold text-gray-700">{{ chEditMode === 'new' ? 'Neuer Verband' : 'Verband bearbeiten' }}</span>
     </div>
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-      <h3 class="font-semibold text-gray-700 mb-4">{{ chEditMode === 'new' ? 'Neues Chapter' : 'Chapter bearbeiten' }}</h3>
+      <h3 class="font-semibold text-gray-700 mb-4">{{ chEditMode === 'new' ? 'Neuer Verband' : 'Verband bearbeiten' }}</h3>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-        <div><label class="lbl">ID</label><input v-model="chEdit.id" :disabled="chEditMode !== 'new'" class="ctrl" placeholder="mein-chapter" /></div>
+        <div><label class="lbl">ID</label><input v-model="chEdit.id" :disabled="chEditMode !== 'new'" class="ctrl" placeholder="mein-verband" /></div>
         <div><label class="lbl">Name</label><input v-model="chEdit.name" class="ctrl" placeholder="z.B. Mein Verein" /></div>
         <div><label class="lbl">Gegründet</label><input type="date" v-model="chEdit.gegruendet" class="ctrl" placeholder="JJJJ-MM-TT" /></div>
         <div><label class="lbl">Aufgelöst</label><input type="date" v-model="chEdit.aufgeloest" class="ctrl" placeholder="JJJJ-MM-TT" /></div>
@@ -576,9 +576,9 @@ const ChapterManager = {
         </div>
       </div>
       <div class="mb-4">
-        <label class="lbl">Chapter-Admins</label>
+        <label class="lbl">Verband-Admins</label>
         <user-picker :picker="chPicker" :name-cache="userNameCache"
-          placeholder="Kürzel oder Name suchen …" color="purple"
+          placeholder="Kürzel, Name oder Organisationseinheit suchen …" color="purple"
           :search-fn="uPickSearch" :add-fn="uPickAdd" :remove-fn="uPickRemove" :keydown-fn="uPickKeydown" />
       </div>
       <div v-if="chError" class="mb-3 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">{{ chError }}</div>
@@ -639,7 +639,7 @@ const ChapterManager = {
     <div v-for="ch in chaptersList.filter(c => c.id === chSelected)" :key="ch.id">
       <!-- Header -->
       <div class="bg-white border-b border-gray-100 px-5 py-3 flex items-center gap-2.5">
-        <button @click="chSelected = ''" class="btn-back"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>Chapter-Übersicht</button>
+        <button @click="chSelected = ''" class="btn-back"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>Verbandsübersicht</button>
         <span class="text-gray-300 text-xs">/</span>
         <span class="font-semibold text-gray-800 text-sm">{{ ch.name }}</span>
         <span class="text-gray-400 text-xs font-mono bg-gray-100 px-1.5 py-0.5 rounded ml-1">{{ ch.id }}</span>
@@ -697,7 +697,7 @@ const ChapterManager = {
           <!-- Quick info -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div>
-              <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Chapter-Admins</div>
+              <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Verband-Admins</div>
               <div class="flex flex-wrap gap-1.5">
                 <span v-for="sa in ch.admins" :key="sa" class="bg-purple-50 text-purple-700 px-2.5 py-0.5 rounded-full text-xs">
                   <span v-if="userNameCache[sa]">{{ userNameCache[sa] }}</span><span v-else class="font-mono">{{ sa }}</span>
@@ -821,20 +821,24 @@ const ChapterManager = {
       <div v-else-if="chTab === 'mitglieder'" class="p-6 max-w-5xl mx-auto space-y-5">
         <!-- Eintritt form (chapter-admin only) -->
         <div v-if="canManageChapterMembers(ch.id)" class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Mitglied hinzufügen</div>
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Mitglied aus Organisation hinzufügen</div>
           <div class="flex flex-wrap gap-3 items-end">
             <div class="flex-1 min-w-36">
               <label class="text-[10px] text-gray-400 uppercase tracking-wide font-semibold block mb-1">Person suchen</label>
               <div class="relative">
                 <input v-model="chEintritt[ch.id + '_search']" @input="chEintrittSearch(ch.id)" @keydown="chEintrittKeydown(ch.id, $event)"
-                  placeholder="Name oder Kürzel …" class="ctrl text-xs" autocomplete="off" />
+                  placeholder="Name, Kürzel oder Organisationseinheit …" class="ctrl text-xs" autocomplete="off" />
                 <div v-if="(chEintritt[ch.id + '_results'] || []).length"
                   class="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden max-h-40 overflow-y-auto">
                   <div v-for="(u, idx) in chEintritt[ch.id + '_results']" :key="u.kuerzel"
                     @click="chEintrittSelect(ch.id, u)"
                     :class="idx === (chEintritt[ch.id + '_activeIdx'] ?? -1) ? 'pick-highlight-green' : ''"
                     class="flex items-center justify-between px-3 py-2 text-xs cursor-pointer border-b border-gray-50 last:border-0 hover:bg-green-50">
-                    <span><span class="font-semibold">{{ u.vorname }} {{ u.name }}</span> <span class="font-mono text-gray-400">({{ u.kuerzel }})</span></span>
+                    <span>
+                      <span class="font-semibold">{{ u.vorname }} {{ u.name }}</span>
+                      <span class="font-mono text-gray-400">({{ u.kuerzel }})</span>
+                      <span v-if="u.orgeinheit" class="text-[10px] text-gray-400 ml-1">OE: {{ u.orgeinheit }}</span>
+                    </span>
                     <span class="text-green-600 font-bold">+</span>
                   </div>
                 </div>
@@ -859,7 +863,7 @@ const ChapterManager = {
         <!-- Member table -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-3">
           <div class="flex items-center justify-between">
-            <div class="text-sm font-semibold text-gray-700">Alle Mitglieder</div>
+            <div class="text-sm font-semibold text-gray-700">Alle Mitglieder des Verbands {{ i18n.chapter(ch.id) }}</div>
             <button @click="exportExcel" class="btn-sec text-xs flex items-center gap-1">📥 Excel</button>
           </div>
           <div v-if="chMbLoading && !chMbLoaded" class="text-center text-gray-400 text-xs py-6 animate-pulse">Laden …</div>
@@ -948,10 +952,10 @@ const ChapterManager = {
       <!-- Tab: Einstellungen -->
       <div v-else-if="chTab === 'einstellungen'" class="p-6 max-w-3xl mx-auto space-y-5">
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
-          <h3 class="text-sm font-semibold text-gray-700">Chapter-Admins</h3>
+            <h3 class="text-sm font-semibold text-gray-700">Verband-Admins</h3>
           <user-picker :picker="chAdminPicker" :name-cache="userNameCache"
             placeholder="Person suchen und hinzufügen …" color="purple" size="md"
-            empty-text="Noch kein Chapter-Admin ernannt."
+              empty-text="Noch kein Verband-Admin ernannt."
             :search-fn="uPickSearch" :add-fn="uPickAdd" :remove-fn="uPickRemove" :keydown-fn="uPickKeydown" />
           <div v-if="chAdminPicker.error" class="text-red-600 text-xs">{{ chAdminPicker.error }}</div>
           <button @click="chSaveAdmins(ch)" :disabled="chAdminPicker.saving" class="btn-sm">{{ chAdminPicker.saving ? 'Speichern …' : 'Admins speichern' }}</button>

@@ -75,7 +75,7 @@ const OrgaAdmin = {
         <div><span class="text-gray-500">Name:</span> <span class="font-semibold">{{ org.name }}</span></div>
       </div>
       <div>
-        <div class="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2">Chapters</div>
+        <div class="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2">Verbände</div>
         <div class="flex flex-wrap gap-2">
           <span v-for="cid in org.chapters" :key="cid" class="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-xs font-medium">{{ i18n.chapter(cid) }}</span>
         </div>
@@ -96,7 +96,7 @@ const OrgaAdmin = {
       <div>
         <label class="lbl">Organisations-Admins</label>
         <user-picker :picker="picker" :name-cache="userNameCache"
-          placeholder="Kürzel oder Name suchen …" color="rose"
+          placeholder="Kürzel, Name oder Organisationseinheit suchen …" color="rose"
           :search-fn="uPickSearch" :add-fn="uPickAdd" :remove-fn="uPickRemove" :keydown-fn="uPickKeydown" />
       </div>
       <div v-if="error" class="p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">{{ error }}</div>

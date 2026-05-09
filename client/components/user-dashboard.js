@@ -73,7 +73,7 @@ const UserDashboard = {
         <span class="text-base">👤</span>
         <h3 class="font-semibold text-gray-800 text-sm">Konto</h3>
       </div>
-      <div class="px-6 py-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="px-6 py-5 grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div>
           <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Kürzel</div>
           <div class="font-mono text-sm text-gray-800 bg-gray-100 px-2.5 py-1 rounded-lg inline-block">{{ user.kuerzel }}</div>
@@ -85,6 +85,10 @@ const UserDashboard = {
         <div>
           <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Nachname</div>
           <div class="text-sm text-gray-800">{{ user.name }}</div>
+        </div>
+        <div>
+          <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Organisationseinheit</div>
+          <div class="text-sm text-gray-800">{{ profile?.orgeinheit || user.orgeinheit || '–' }}</div>
         </div>
       </div>
     </div>
@@ -99,7 +103,7 @@ const UserDashboard = {
         <span v-if="isOrgaAdmin" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-700">🏛 Organisations-Admin</span>
         <span v-if="isZeitstelle" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">⏱ Zeitstelle</span>
         <template v-for="(role, cid) in (user.roles || {})" :key="cid">
-          <span v-if="role.level === ROLE_LEVEL.CHAPTER" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">🏢 Chapter-Admin · {{ i18n.chapter(cid) }}</span>
+          <span v-if="role.level === ROLE_LEVEL.CHAPTER" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">🏢 Verband-Admin · {{ i18n.chapter(cid) }}</span>
           <span v-for="sp in (role.sparten || [])" :key="cid + '|' + sp"
             :class="role.level === ROLE_LEVEL.CHAPTER ? 'bg-teal-100 text-teal-700' : 'bg-blue-100 text-blue-700'"
             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold">
@@ -162,7 +166,7 @@ const UserDashboard = {
 
     <!-- Chapter directory (only for plain members without any chapter roles) -->
     <div v-if="chapterDirectory && chapterDirectory.length && !isOrgaAdmin && !isZeitstelle && !Object.keys(user.roles || {}).length">
-      <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Verfügbare Chapter</h2>
+      <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Verfügbare Verbände</h2>
       <div class="space-y-3">
         <div v-for="ch in chapterDirectory" :key="ch.id"
           class="bg-white rounded-2xl border border-gray-200/80 shadow-sm p-5">

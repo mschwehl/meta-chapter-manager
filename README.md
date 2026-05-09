@@ -25,17 +25,34 @@ Data is stored in a plain JSON git repository — no external database required.
 cd server
 npm install
 
-# 2. Download vendor files (Tailwind CSS, Vue — not committed to git)
-cd ..
-node download-vendor.js
-
-# 3. Run with file-watcher and dev JWT secret (no .env needed)
-cd server
+# 2. Run with file-watcher and dev JWT secret (no .env needed)
 npm run dev
 ```
 
 Open <http://localhost:3000>  
 Login: **admin / admin** — you will be forced to change the password on first login.
+
+---
+
+## OpenAPI
+
+- Raw spec: <http://localhost:3000/api/openapi.yaml>
+- Interactive Swagger UI: <http://localhost:3000/api/openapi>
+- Spec source file: `spec/openapi.yaml`
+
+Current focus of the spec: global user pool profile operations (create/update user), not chapter membership endpoints.
+
+Swagger UI assets are served locally from the backend (no CDN required).
+
+---
+
+## Air-gapped / Offline
+
+- Runtime does not require internet access.
+- Browser vendor files are included in `client/vendor/`.
+- OpenAPI UI assets are served locally from `server/node_modules/swagger-ui-dist`.
+- Required setup step is `npm install` (plus normal app start command).
+- `node download-vendor.js` is optional and only for manually refreshing vendor files when internet is available.
 
 ---
 

@@ -19,7 +19,8 @@ router.get('/search', async (req, res) => {
   const results = users.filter(u =>
     re.test(u.kuerzel.toLowerCase()) ||
     (u.name && re.test(u.name.toLowerCase())) ||
-    (u.vorname && re.test(u.vorname.toLowerCase()))
+    (u.vorname && re.test(u.vorname.toLowerCase())) ||
+    (u.orgeinheit && re.test(String(u.orgeinheit).toLowerCase()))
   );
   res.json(results);
 });

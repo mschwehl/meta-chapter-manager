@@ -51,9 +51,9 @@
           <h2 class="text-lg font-bold text-gray-800 mb-5">Veranstaltungsdetails</h2>
           <div class="space-y-4">
             <div>
-              <label class="label">Chapter</label>
+              <label class="label">Verband</label>
               <select v-model="event.chapterId" @change="onChapterChange" class="input">
-                <option value="">â€“ Chapter wÃ¤hlen â€“</option>
+                <option value="">â€“ Verband wÃ¤hlen â€“</option>
                 <option v-for="ch in chapters" :key="ch.id" :value="ch.id">{{ i18n.chapter(ch.id) }}</option>
               </select>
             </div>
@@ -305,7 +305,7 @@
       </div>
 
       <div class="bg-gray-50 rounded-xl p-5 mb-6 text-sm space-y-1 text-gray-700">
-        <div><span class="font-medium">Chapter:</span> {{ i18n.chapter(event.chapterId) }}</div>
+        <div><span class="font-medium">Verband:</span> {{ i18n.chapter(event.chapterId) }}</div>
         <div><span class="font-medium">Sparte:</span> {{ i18n.sparte(event.sparte) }}</div>
         <div><span class="font-medium">Datum:</span> {{ event.datum }}</div>
         <div><span class="font-medium">Uhrzeit:</span> {{ event.von }} â€“ {{ event.bis }}</div>
@@ -593,7 +593,7 @@
         if (sameChapter) {
           return { ok: false, warn: true,  label: 'âš  Andere Sparte',  cls: 'bg-yellow-100 text-yellow-700' };
         }
-        return   { ok: false, warn: false, label: 'âœ— Fremdes Chapter', cls: 'bg-red-100 text-red-700'    };
+        return   { ok: false, warn: false, label: '✕ Fremder Verband', cls: 'bg-red-100 text-red-700'    };
       }
 
       async function generateWord() {

@@ -131,7 +131,7 @@ const SystemInfo = {
           <dl class="px-5 py-3.5 space-y-2 text-[13px]">
             <div class="flex justify-between"><dt class="text-gray-400">Organisation</dt><dd class="font-semibold text-gray-700 dark:text-gray-300">{{ info.db.orgName }}</dd></div>
             <div class="flex justify-between"><dt class="text-gray-400">Benutzer</dt><dd class="font-semibold text-gray-700 dark:text-gray-300">{{ info.db.userCount }}</dd></div>
-            <div class="flex justify-between"><dt class="text-gray-400">Chapters</dt><dd class="font-semibold text-gray-700 dark:text-gray-300">{{ info.db.chapterCount }}</dd></div>
+            <div class="flex justify-between"><dt class="text-gray-400">Verbände</dt><dd class="font-semibold text-gray-700 dark:text-gray-300">{{ info.db.chapterCount }}</dd></div>
             <div class="flex justify-between"><dt class="text-gray-400">Sparten</dt><dd class="font-semibold text-gray-700 dark:text-gray-300">{{ info.db.sparteCount }}</dd></div>
           </dl>
         </div>

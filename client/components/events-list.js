@@ -135,7 +135,7 @@ const EventsList = {
     <h3 class="font-semibold text-gray-700 dark:text-gray-200 mb-4 text-sm">Neue Veranstaltung anlegen</h3>
     <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
       <div v-if="!singleChapter">
-        <label class="lbl">Chapter</label>
+        <label class="lbl">Verband</label>
         <select v-model="evNew.chapterId" @change="onChapterChange" class="ctrl text-xs">
           <option value="">– Wählen –</option>
           <option v-for="ch in prChapters" :key="ch.id" :value="ch.id">{{ i18n.chapter(ch.id) }}</option>
@@ -177,7 +177,7 @@ const EventsList = {
           </th>
           <th class="px-5 py-2.5 text-left">Zeit</th>
           <th class="px-5 py-2.5 text-left cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 select-none" @click="toggleSort('chapterId')">
-            Chapter <span class="text-[9px] ml-0.5">{{ sortIcon('chapterId') }}</span>
+            Verband <span class="text-[9px] ml-0.5">{{ sortIcon('chapterId') }}</span>
           </th>
           <th class="px-5 py-2.5 text-left">Sparte</th>
           <th class="px-5 py-2.5 text-left hidden md:table-cell">Ort</th>

@@ -148,8 +148,7 @@ const PruefeWizard = {
     participantBusinessEmail(p) {
       const kontakte = p?.kontakte || [];
       const business = kontakte.find(k => k.typ === 'email' && String(k.attribut || '').toLowerCase() === 'business');
-      const fallback = kontakte.find(k => k.typ === 'email');
-      return String((business || fallback)?.wert || '').trim();
+      return String(business?.wert || '').trim();
     },
     remove(p) { this.matched = this.matched.filter(m => m.kuerzel !== p.kuerzel); },
     memberChapter(u) {
@@ -163,6 +162,11 @@ const PruefeWizard = {
              || (u.chapters||[]).find(c => c.chapterId === this.event.chapterId);
       return ch?.eintrittsdatum || null;
     },
+    memberLabel(u) {
+      const ch = this.memberChapter(u);
+      if (!ch) return '–';
+      return `${this.i18n.chapter(ch.chapterId)} · ${this.i18n.sparte(ch.sparte)}`;
+    },
     validation(u) {
       const chs = u.chapters || [], ch = this.event.chapterId, sp = this.event.sparte;
       if (!ch || !sp) return { ok: true, warn: false, label: '–', cls: 'val-none' };
@@ -174,7 +178,7 @@ const PruefeWizard = {
       if (otherSparte) return { ok: false, warn: true, label: `⚠ ${this.i18n.sparte(otherSparte.sparte)} · ${this.i18n.chapter(otherSparte.chapterId)}`, cls: 'val-warn' };
       const other = chs.find(c => c.status === 'aktiv') || chs[0];
       if (other) return { ok: false, warn: true, label: `↔ ${this.i18n.chapter(other.chapterId)}`, cls: 'val-other' };
-      return { ok: false, warn: false, blocked: true, label: 'Kein Chapter', cls: 'val-blocked' };
+      return { ok: false, warn: false, blocked: true, label: 'Kein Verband', cls: 'val-blocked' };
     },
     async generateWord() {
       this.generating = true; this.downloadErr = '';
@@ -191,21 +195,21 @@ const PruefeWizard = {
       this.ensureParticipantTimes();
       const orgEmails = this.org?.emails || {};
       const zeitstelleEmail = orgEmails.zeitstelle || '';
-      const domain = orgEmails.domain || '';
-      const ownCcEmail = domain ? `${this.user.kuerzel}@${domain}` : '';
       const ev = this.event;
       const chapterName = this.i18n.chapter(ev.chapterId);
       const sparteName = this.i18n.sparte(ev.sparte);
       const subject = encodeURIComponent(`Zeitgutschrift für ${chapterName} ${sparteName}`);
 
       const bodyLines = [
+        '*html*',
+        '',
         `Sportgruppe: ${chapterName}`,
         `Sportart: ${sparteName}`,
         `Datum: ${this.formatDateDe(ev.datum)}`,
         '',
         'Vorname',
         'Name',
-        'Referat',
+        'Organisationseinheit',
         'Von',
         'Bis',
       ];
@@ -220,10 +224,14 @@ const PruefeWizard = {
         );
       });
 
+      // Keep legacy Outlook-compatible footer structure used by existing EML templates.
+      const tableRows = Math.max(12, this.matched.length);
+      bodyLines.push('', '', String(tableRows));
+      for (let i = 0; i < 18; i++) bodyLines.push('');
+
       const body = encodeURIComponent(bodyLines.join('\n'));
       let href = `mailto:${zeitstelleEmail}?subject=${subject}&body=${body}`;
       const ccList = [];
-      if (ownCcEmail) ccList.push(ownCcEmail);
       this.matched.forEach((p) => {
         const mail = this.participantBusinessEmail(p);
         if (mail) ccList.push(mail);
@@ -285,7 +293,7 @@ const PruefeWizard = {
           </template>
           <template v-else>
             <div>
-              <label class="lbl">Chapter</label>
+              <label class="lbl">Verband</label>
               <select v-model="event.chapterId" @change="onChapterChange" class="ctrl">
                 <option value="">– Wählen –</option>
                 <option v-for="ch in prChapters" :key="ch.id" :value="ch.id">{{ i18n.chapter(ch.id) }}</option>
@@ -335,7 +343,7 @@ const PruefeWizard = {
         <div class="shrink-0">
           <div class="relative">
             <input v-model="search" @input="onSearchInput" @keydown="resultsKeydown" ref="searchRef"
-              placeholder="Teilnehmer suchen — Name oder Kürzel tippen …" class="ctrl text-sm w-full pr-8" autocomplete="off" />
+              placeholder="Teilnehmer suchen — Name, Kürzel oder Organisationseinheit tippen …" class="ctrl text-sm w-full pr-8" autocomplete="off" />
             <span v-if="searching" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">…</span>
           </div>
           <div v-if="results.length" class="mt-1 border border-gray-200 rounded-lg overflow-hidden max-h-52 overflow-y-auto">
@@ -345,6 +353,7 @@ const PruefeWizard = {
               <div class="flex items-center gap-3">
                 <span class="font-medium text-gray-800">{{ u.vorname }} {{ u.name }}</span>
                 <span class="text-gray-400 text-xs font-mono">{{ u.kuerzel }}</span>
+                <span v-if="u.orgeinheit" class="text-[10px] text-gray-400">OE: {{ u.orgeinheit }}</span>
                 <span :class="validation(u).cls" class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold">{{ validation(u).label }}</span>
               </div>
               <span v-if="!validation(u).blocked" class="text-green-600 font-bold text-base leading-none">+</span>
@@ -353,42 +362,46 @@ const PruefeWizard = {
           </div>
           <div v-else-if="search.length >= 2 && !searching" class="mt-1 text-gray-400 text-xs text-center py-2">Kein Treffer.</div>
         </div>
-        <div class="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
+        <div class="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden shadow-sm">
           <div class="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between text-xs">
             <span class="font-semibold text-gray-500 uppercase tracking-wide">Bestätigt</span>
-            <span class="text-blue-600 font-semibold">{{ matched.length }} Teilnehmer</span>
+            <div class="flex items-center gap-2">
+              <span class="text-blue-600 font-semibold">{{ matched.length }} Teilnehmer</span>
+              <span class="hidden sm:inline text-gray-400">Standard aus Event: {{ event.von }}–{{ event.bis }}</span>
+              <button @click="copyEventTimesToAll" :disabled="!matched.length" class="btn-sec text-[11px] px-2 py-1 disabled:opacity-40 disabled:cursor-not-allowed">Eventzeit auf alle</button>
+            </div>
           </div>
           <div v-if="!matched.length" class="text-center text-gray-300 text-sm py-8">Noch keine Zuordnung — oben suchen und hinzufügen.</div>
-          <table v-else class="w-full text-sm">
-            <thead class="bg-gray-100 text-xs text-gray-500 uppercase tracking-wide">
-              <tr>
-                <th class="px-4 py-2 text-left w-8">#</th>
-                <th class="px-4 py-2 text-left">Name</th>
-                <th class="px-4 py-2 text-left">Kürzel</th>
-                <th class="px-4 py-2 text-left">Referat</th>
-                <th class="px-4 py-2 text-left">Chapter</th>
-                <th class="px-4 py-2 text-left">Sparte</th>
-                <th class="px-4 py-2 text-left">Mitgliedschaft</th>
-                <th class="px-4 py-2 text-left">Eintritt</th>
-                <th class="px-4 py-2 w-8"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(p, pi) in matched" :key="p.kuerzel"
-                :class="validation(p).ok ? '' : validation(p).warn ? 'row-warn' : 'row-error'"
-                class="border-t border-gray-100 hover:bg-white transition-colors">
-                <td class="px-4 py-2 text-gray-400 text-xs">{{ pi + 1 }}</td>
-                <td class="px-4 py-2 font-medium text-gray-800">{{ p.vorname }} {{ p.name }}</td>
-                <td class="px-4 py-2 font-mono text-gray-500 text-xs">{{ p.kuerzel }}</td>
-                <td class="px-4 py-2 text-gray-500 text-xs">{{ p.orgeinheit || '–' }}</td>
-                <td class="px-4 py-2 text-gray-600 text-xs">{{ memberChapter(p) ? i18n.chapter(memberChapter(p).chapterId) : '–' }}</td>
-                <td class="px-4 py-2 text-gray-600 text-xs">{{ memberChapter(p) ? i18n.sparte(memberChapter(p).sparte) : '–' }}</td>
-                <td class="px-4 py-2"><span :class="validation(p).cls" class="px-2 py-0.5 rounded-full text-[11px] font-semibold">{{ validation(p).label }}</span></td>
-                <td class="px-4 py-2 text-gray-400 text-xs">{{ entryDate(p) || '–' }}</td>
-                <td class="px-4 py-2 text-right"><button @click="remove(p)" class="text-red-400 hover:text-red-600 text-xs">✕</button></td>
-              </tr>
-            </tbody>
-          </table>
+          <div v-else class="p-3 space-y-2">
+            <div v-for="(p, pi) in matched" :key="p.kuerzel"
+              :class="validation(p).ok ? 'bg-white border-gray-100' : validation(p).warn ? 'bg-yellow-50 border-yellow-200' : 'bg-red-50 border-red-200'"
+              class="rounded-xl border p-3 transition-colors">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-semibold">#{{ pi + 1 }}</span>
+                    <span class="font-semibold text-gray-800">{{ p.vorname }} {{ p.name }}</span>
+                    <span class="font-mono text-[11px] text-gray-400">{{ p.kuerzel }}</span>
+                    <span :class="validation(p).cls" class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold">{{ validation(p).label }}</span>
+                  </div>
+                  <div class="mt-1 text-[11px] text-gray-500 flex flex-wrap gap-x-3 gap-y-1">
+                    <span>Organisationseinheit: {{ p.orgeinheit || '–' }}</span>
+                    <span>Mitglied: {{ memberLabel(p) }}</span>
+                    <span>Eintritt: {{ entryDate(p) || '–' }}</span>
+                  </div>
+                </div>
+                <button @click="remove(p)" class="text-red-400 hover:text-red-600 text-xs shrink-0">✕</button>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
+                <label class="text-[10px] text-gray-500 uppercase tracking-wide font-semibold">Von
+                  <input v-model="p.zeitVon" type="time" step="60" class="ctrl text-xs py-1.5 px-2 mt-1" />
+                </label>
+                <label class="text-[10px] text-gray-500 uppercase tracking-wide font-semibold">Bis
+                  <input v-model="p.zeitBis" type="time" step="60" class="ctrl text-xs py-1.5 px-2 mt-1" />
+                </label>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -400,50 +413,51 @@ const PruefeWizard = {
       <div class="text-center mb-6">
         <div class="text-4xl mb-2">📋</div>
         <h2 class="text-lg font-bold text-gray-800">Zeitkorrektur vorbereiten</h2>
-        <p class="text-gray-500 text-sm">{{ matched.length }} Teilnehmer — Chapter-Mitgliedschaft geprüft</p>
+        <p class="text-gray-500 text-sm">{{ matched.length }} Teilnehmer — Verband-Mitgliedschaft geprüft</p>
       </div>
       <div class="bg-gray-50 rounded-lg p-4 mb-6 text-sm grid grid-cols-2 gap-2 text-gray-700">
-        <div><b>Chapter:</b> {{ i18n.chapter(event.chapterId) }}</div>
+        <div><b>Verband:</b> {{ i18n.chapter(event.chapterId) }}</div>
         <div><b>Sparte:</b> {{ i18n.sparte(event.sparte) }}</div>
         <div><b>Datum:</b> {{ event.datum }}</div>
         <div><b>Uhrzeit:</b> {{ event.von }} – {{ event.bis }}</div>
         <div class="col-span-2"><b>Ort:</b> {{ event.ort || '–' }}</div>
       </div>
       <div v-if="matched.some(p => !validation(p).ok)" class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-800">
-        ⚠️ Einige Teilnehmer haben keine aktive Mitgliedschaft im gewählten Chapter/Sparte.
+        ⚠️ Einige Teilnehmer haben keine aktive Mitgliedschaft im gewählten Verband/Sparte.
       </div>
       <div class="mb-3 flex flex-wrap items-center gap-2">
         <button @click="copyEventTimesToAll" class="btn-sec text-xs">Eventzeit auf alle anwenden</button>
         <button @click="copyTimesFromFirst" :disabled="matched.length < 2" class="btn-sec text-xs disabled:opacity-40 disabled:cursor-not-allowed">1. Zeitzeile auf alle kopieren</button>
       </div>
-      <table class="w-full text-xs mb-6">
-        <thead class="bg-blue-700 text-white"><tr>
-          <th class="px-3 py-2 text-left">Nr.</th><th class="px-3 py-2 text-left">Kürzel</th>
-          <th class="px-3 py-2 text-left">Name</th><th class="px-3 py-2 text-left">Vorname</th>
-          <th class="px-3 py-2 text-left">Referat</th><th class="px-3 py-2 text-left">Von</th>
-          <th class="px-3 py-2 text-left">Bis</th><th class="px-3 py-2 text-left">Chapter</th>
-          <th class="px-3 py-2 text-left">Sparte</th><th class="px-3 py-2 text-left">Mitgliedschaft</th>
-          <th class="px-3 py-2 text-left">Kopieren</th>
-        </tr></thead>
-        <tbody>
-          <tr v-for="(p, i) in matched" :key="p.kuerzel"
-            :class="!validation(p).ok ? (validation(p).warn ? 'row-warn' : 'row-error') : ''" class="border-t">
-            <td class="px-3 py-1.5 text-gray-500">{{ i + 1 }}</td>
-            <td class="px-3 py-1.5 font-mono text-gray-600">{{ p.kuerzel }}</td>
-            <td class="px-3 py-1.5">{{ p.name }}</td>
-            <td class="px-3 py-1.5">{{ p.vorname }}</td>
-            <td class="px-3 py-1.5 text-gray-600">{{ p.orgeinheit || '–' }}</td>
-            <td class="px-3 py-1.5"><input v-model="p.zeitVon" type="time" step="60" class="ctrl text-xs py-1 px-2 w-28" /></td>
-            <td class="px-3 py-1.5"><input v-model="p.zeitBis" type="time" step="60" class="ctrl text-xs py-1 px-2 w-28" /></td>
-            <td class="px-3 py-1.5 text-gray-600">{{ memberChapter(p) ? i18n.chapter(memberChapter(p).chapterId) : '–' }}</td>
-            <td class="px-3 py-1.5 text-gray-600">{{ memberChapter(p) ? i18n.sparte(memberChapter(p).sparte) : '–' }}</td>
-            <td class="px-3 py-1.5"><span :class="validation(p).cls" class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold">{{ validation(p).label }}</span></td>
-            <td class="px-3 py-1.5">
-              <button @click="copyTimesFromPrevious(i)" :disabled="i === 0" class="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">↑ von oben</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="space-y-3 mb-6">
+        <div v-for="(p, i) in matched" :key="p.kuerzel"
+          :class="validation(p).ok ? 'bg-white border-gray-100' : validation(p).warn ? 'bg-yellow-50 border-yellow-200' : 'bg-red-50 border-red-200'"
+          class="rounded-xl border p-3">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 font-semibold">#{{ i + 1 }}</span>
+                <span class="font-semibold text-gray-800">{{ p.vorname }} {{ p.name }}</span>
+                <span class="font-mono text-[11px] text-gray-400">{{ p.kuerzel }}</span>
+                <span :class="validation(p).cls" class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold">{{ validation(p).label }}</span>
+              </div>
+              <div class="mt-1 text-[11px] text-gray-500 flex flex-wrap gap-x-3 gap-y-1">
+                <span>Organisationseinheit: {{ p.orgeinheit || '–' }}</span>
+                <span>Mitglied: {{ memberLabel(p) }}</span>
+              </div>
+            </div>
+            <button @click="copyTimesFromPrevious(i)" :disabled="i === 0" class="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed shrink-0">↑ von oben</button>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
+            <label class="text-[10px] text-gray-500 uppercase tracking-wide font-semibold">Von
+              <input v-model="p.zeitVon" type="time" step="60" class="ctrl text-xs py-1.5 px-2 mt-1" />
+            </label>
+            <label class="text-[10px] text-gray-500 uppercase tracking-wide font-semibold">Bis
+              <input v-model="p.zeitBis" type="time" step="60" class="ctrl text-xs py-1.5 px-2 mt-1" />
+            </label>
+          </div>
+        </div>
+      </div>
       <div v-if="downloadErr" class="mb-4 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">{{ downloadErr }}</div>
       <div v-if="wordDownloaded || pdfDownloaded" class="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-xs flex items-center gap-2">
         <span class="text-base">📁</span>

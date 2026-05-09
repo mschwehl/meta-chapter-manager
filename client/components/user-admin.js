@@ -35,7 +35,8 @@ const UserAdmin = {
         list = list.filter(u =>
           u.kuerzel.toLowerCase().includes(q) ||
           (u.name || '').toLowerCase().includes(q) ||
-          (u.vorname || '').toLowerCase().includes(q)
+          (u.vorname || '').toLowerCase().includes(q) ||
+          (u.orgeinheit || '').toLowerCase().includes(q)
         );
       }
       const key = this.sortBy;
@@ -355,7 +356,7 @@ const UserAdmin = {
     <!-- List -->
     <div class="flex flex-col border-r border-gray-200 bg-white" :class="(selected || creating) ? 'hidden lg:flex lg:w-1/2 xl:w-2/5' : 'w-full lg:w-1/2 xl:w-2/5'">
       <div class="px-4 py-3 border-b border-gray-100 shrink-0">
-        <input v-model="filter" placeholder="Suchen … (Name oder Kürzel)" class="ctrl text-xs w-full" />
+        <input v-model="filter" placeholder="Suchen … (Name, Kürzel oder Organisationseinheit)" class="ctrl text-xs w-full" />
       </div>
       <div class="flex-1 overflow-y-auto">
         <div v-if="loading" class="p-6 text-center text-gray-400 text-xs animate-pulse">Laden …</div>
@@ -372,7 +373,7 @@ const UserAdmin = {
                 Vorname <span class="text-[9px]">{{ sortIcon('vorname') }}</span>
               </th>
               <th class="px-4 py-2 text-left cursor-pointer hover:text-gray-700" @click="toggleSort('orgeinheit')">
-                Referat <span class="text-[9px]">{{ sortIcon('orgeinheit') }}</span>
+                Organisationseinheit <span class="text-[9px]">{{ sortIcon('orgeinheit') }}</span>
               </th>
               <th class="px-4 py-2 text-center">Mitgl.</th>
             </tr>

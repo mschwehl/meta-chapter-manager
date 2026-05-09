@@ -41,7 +41,12 @@ const MemberManager = {
         list = list.filter(u => !(u.chapters||[]).length);
         const q = this.filter.toLowerCase();
         if (!q) return list;
-        return list.filter(u => u.name.toLowerCase().includes(q) || u.vorname.toLowerCase().includes(q) || u.kuerzel.toLowerCase().includes(q));
+        return list.filter(u =>
+          u.name.toLowerCase().includes(q) ||
+          u.vorname.toLowerCase().includes(q) ||
+          u.kuerzel.toLowerCase().includes(q) ||
+          (u.orgeinheit || '').toLowerCase().includes(q)
+        );
       }
       // Non-orgAdmin: only show members who belong to the scoped chapter
       if (!this.isOrgaAdmin && this.chapter) {
@@ -56,7 +61,10 @@ const MemberManager = {
       const q = this.filter.toLowerCase();
       if (!q) return list;
       return list.filter(u =>
-        u.name.toLowerCase().includes(q) || u.vorname.toLowerCase().includes(q) || u.kuerzel.toLowerCase().includes(q)
+        u.name.toLowerCase().includes(q) ||
+        u.vorname.toLowerCase().includes(q) ||
+        u.kuerzel.toLowerCase().includes(q) ||
+        (u.orgeinheit || '').toLowerCase().includes(q)
       );
     },
   },
@@ -109,7 +117,7 @@ const MemberManager = {
     },
     canEditChapter(cid) { return this.isOrgaAdmin || (this.user.roles || {})[cid]?.level === ROLE_LEVEL.CHAPTER; },
     select(u) { this.selected = u; this.edit = null; this.error = ''; this.chapterError = ''; },
-    startEdit(u) { this.edit = { name: u.name, vorname: u.vorname, kontakte: this.normalizeContactsForForm(u.kontakte) }; this.error = ''; },
+    startEdit(u) { this.edit = { name: u.name, vorname: u.vorname, orgeinheit: u.orgeinheit || '', kontakte: this.normalizeContactsForForm(u.kontakte) }; this.error = ''; },
     async load() {
       this.loading = true;
       try { const p = this.chapter ? `?chapterId=${this.chapter}` : ''; const r = await this.api(`/api/admin/users${p}`); this.members = await r.json(); } catch {} finally { this.loading = false; }
@@ -139,7 +147,7 @@ const MemberManager = {
       } catch (e) { this.chapterError = e.message; }
     },
     async removeChapter(ch) {
-      if (!confirm(`Chapter-Mitgliedschaft ${this.i18n.chapter(ch.chapterId)} – ${this.i18n.sparte(ch.sparte)} wirklich entfernen?`)) return;
+      if (!confirm(`Verband-Mitgliedschaft ${this.i18n.chapter(ch.chapterId)} – ${this.i18n.sparte(ch.sparte)} wirklich entfernen?`)) return;
       this.chapterError = '';
       try {
         const r = await this.api(`/api/admin/users/${this.selected.kuerzel}/chapter`, { method: 'DELETE', body: JSON.stringify({ chapterId: ch.chapterId, sparte: ch.sparte }) });
@@ -212,9 +220,9 @@ const MemberManager = {
         <!-- OrgAdmin: chapter switcher + optional sparte filter -->
         <template v-if="isOrgaAdmin">
           <select v-model="chapter" @change="sparte = ''; load()" class="ctrl text-xs">
-            <option value="">Alle Chapter</option>
+            <option value="">Alle Verbände</option>
             <option v-for="ch in prChapters" :key="ch.id" :value="ch.id">{{ i18n.chapter(ch.id) }}</option>
-            <option value="none">– Ohne Chapter</option>
+            <option value="none">– Ohne Verband</option>
           </select>
           <select v-if="spartenInChapter.length && chapter !== 'none'" v-model="sparte" class="ctrl text-xs">
             <option value="">Alle Sparten</option>
@@ -234,14 +242,14 @@ const MemberManager = {
             <option v-for="sp in spartenInChapter" :key="sp.id" :value="sp.id">{{ sp.name || sp.id }}</option>
           </select>
         </template>
-        <input v-model="filter" placeholder="Suchen …" class="ctrl text-xs" />
+        <input v-model="filter" placeholder="Suchen … (Name, Kürzel oder Organisationseinheit)" class="ctrl text-xs" />
         <!-- Pool search: find any user to assign to this chapter -->
         <div class="relative">
           <input v-model="poolQuery" @input="poolSearch" placeholder="🔍 Benutzer aus Pool suchen …" class="ctrl text-xs border-dashed border-blue-300 bg-blue-50/40" />
           <div v-if="poolResults.length" class="absolute z-30 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
             <div v-for="u in poolResults" :key="u.kuerzel" @click="poolSelect(u)"
               class="px-3 py-2 hover:bg-blue-50 cursor-pointer flex items-center justify-between text-xs border-b border-gray-50 last:border-0">
-              <span class="font-medium text-gray-800">{{ u.vorname }} {{ u.name }}</span>
+              <span class="font-medium text-gray-800">{{ u.vorname }} {{ u.name }}<span v-if="u.orgeinheit" class="text-gray-400 font-normal"> · {{ u.orgeinheit }}</span></span>
               <span class="font-mono text-[10px] text-gray-400">{{ u.kuerzel }}</span>
             </div>
           </div>
@@ -256,6 +264,7 @@ const MemberManager = {
             <span class="font-medium text-sm text-gray-800">{{ u.name }}, {{ u.vorname }}</span>
             <span class="font-mono text-[10px] text-gray-400">{{ u.kuerzel }}</span>
           </div>
+          <div v-if="u.orgeinheit" class="text-[10px] text-gray-400 mt-0.5">Organisationseinheit: {{ u.orgeinheit }}</div>
           <div class="flex flex-wrap gap-1 mt-0.5">
             <span v-for="ch in sparseChips(u)" :key="ch.chapterId + ch.sparte"
               :class="isActive(ch) ? 'mb-chip-active' : 'mb-chip-inactive'"
@@ -276,7 +285,7 @@ const MemberManager = {
             <div>
               <h2 class="text-lg font-bold text-gray-800">{{ selected.vorname }} {{ selected.name }}</h2>
               <span class="font-mono text-xs text-gray-400">{{ selected.kuerzel }}</span>
-              <div class="text-xs text-gray-500">Referat: {{ selected.orgeinheit || '–' }}</div>
+              <div class="text-xs text-gray-500">Organisationseinheit: {{ selected.orgeinheit || '–' }}</div>
               <div v-if="selected.kontakte && selected.kontakte.length" class="text-xs text-gray-400">
                 <div v-for="k in selected.kontakte" :key="k.typ + k.wert + (k.attribut || '')">{{ contactDisplay(k) }}</div>
               </div>
@@ -292,6 +301,10 @@ const MemberManager = {
             <div class="grid grid-cols-2 gap-4 mb-3">
               <div><label class="lbl">Nachname</label><input v-model="edit.name" class="ctrl" /></div>
               <div><label class="lbl">Vorname</label><input v-model="edit.vorname" class="ctrl" /></div>
+            </div>
+            <div class="mb-3">
+              <label class="lbl">Organisationseinheit</label>
+              <input v-model="edit.orgeinheit" class="ctrl" placeholder="z.B. 22E" />
             </div>
             <div class="mb-3">
               <label class="lbl">Kontakte</label>
@@ -320,7 +333,7 @@ const MemberManager = {
           </div>
         </div>
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Chapter-Mitgliedschaften</div>
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Verband-Mitgliedschaften</div>
           <div v-for="ch in (selected.chapters || [])" :key="ch.chapterId + ch.sparte"
             class="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
             <span class="text-sm text-gray-700 font-medium">{{ i18n.chapter(ch.chapterId) }}</span>
@@ -334,7 +347,7 @@ const MemberManager = {
             <div class="text-xs font-semibold text-gray-500 mb-2">Mitgliedschaft hinzufügen</div>
             <div class="flex items-end gap-2 flex-wrap">
               <div class="flex-1 min-w-[120px]">
-                <label class="lbl">Chapter</label>
+                <label class="lbl">Verband</label>
                 <select v-model="addCh.chapterId" @change="addCh.sparte = ''" class="ctrl text-xs">
                   <option value="">–</option>
                   <option v-for="c in accessibleChapters" :key="c.id" :value="c.id">{{ i18n.chapter(c.id) }}</option>

@@ -29,10 +29,10 @@
     <!-- Filter + Aktionen -->
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <div class="flex gap-2 flex-wrap">
-        <input v-model="filter.q" @input="applyFilter" type="text" placeholder="Name / Kürzel suchen …"
+        <input v-model="filter.q" @input="applyFilter" type="text" placeholder="Name / Kürzel / Organisationseinheit suchen …"
           class="input w-52" />
         <select v-model="filter.chapterId" @change="loadMembers" class="input w-40">
-          <option value="">Alle Chapters</option>
+          <option value="">Alle Verbände</option>
           <option v-for="c in chapters" :key="c.id" :value="c.id">{{ c.name }}</option>
         </select>
         <select v-model="filter.status" @change="applyFilter" class="input w-36">
@@ -59,7 +59,7 @@
             <th class="px-4 py-3 text-left">Kürzel</th>
             <th class="px-4 py-3 text-left">Nachname</th>
             <th class="px-4 py-3 text-left">Vorname</th>
-            <th class="px-4 py-3 text-left">Chapter / Sparte</th>
+            <th class="px-4 py-3 text-left">Verband / Sparte</th>
             <th class="px-4 py-3 text-left">Beitritt</th>
             <th class="px-4 py-3 text-left">Status</th>
             <th class="px-4 py-3 text-left">Aktionen</th>
@@ -124,12 +124,12 @@
 
         <div>
           <div class="flex items-center justify-between mb-2">
-            <label class="label mb-0">Chapter-Mitgliedschaften</label>
+            <label class="label mb-0">Verband-Mitgliedschaften</label>
             <button type="button" @click="addChapterRow" class="text-xs text-blue-600 hover:text-blue-800">＋ Hinzufügen</button>
           </div>
           <div v-for="(c, i) in modal.form.chapters" :key="i" class="flex gap-2 mb-2 items-center">
             <select v-model="c.chapterId" class="input flex-1">
-              <option value="">Chapter wählen</option>
+              <option value="">Verband wählen</option>
               <option v-for="ch in chapters" :key="ch.id" :value="ch.id">{{ ch.name }}</option>
             </select>
             <select v-model="c.sparte" class="input flex-1">
@@ -192,7 +192,8 @@ createApp({
       if (q) list = list.filter(m =>
         m.kuerzel.toLowerCase().includes(q) ||
         (m.name||'').toLowerCase().includes(q) ||
-        (m.vorname||'').toLowerCase().includes(q)
+        (m.vorname||'').toLowerCase().includes(q) ||
+        (m.orgeinheit||'').toLowerCase().includes(q)
       );
       if (filter.status) list = list.filter(m =>
         (m.chapters||[]).some(c => c.status === filter.status)

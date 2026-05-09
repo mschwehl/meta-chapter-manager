@@ -135,6 +135,10 @@ const UserSettings = {
             <span class="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">Nachname</span>
             <span class="text-sm text-gray-800 dark:text-gray-200">{{ user.name }}</span>
           </div>
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">Organisationseinheit</span>
+            <span class="text-sm text-gray-800 dark:text-gray-200">{{ user.orgeinheit || '–' }}</span>
+          </div>
         </div>
       </div>
 
@@ -148,7 +152,7 @@ const UserSettings = {
           <span v-if="isOrgaAdmin" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-700">🏛 Organisations-Admin</span>
           <span v-if="isZeitstelle" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">⏱ Zeitstelle</span>
           <template v-for="(role, cid) in (user.roles || {})" :key="cid">
-            <span v-if="role.level === ROLE_LEVEL.CHAPTER" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">🏢 Chapter-Admin · {{ i18n.chapter(cid) }}</span>
+            <span v-if="role.level === ROLE_LEVEL.CHAPTER" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">🏢 Verband-Admin · {{ i18n.chapter(cid) }}</span>
             <span v-for="sp in (role.sparten || [])" :key="cid + '|' + sp"
               :class="role.level === ROLE_LEVEL.CHAPTER ? 'bg-teal-100 text-teal-700' : 'bg-blue-100 text-blue-700'"
               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold">
