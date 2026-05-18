@@ -40,3 +40,8 @@ Thumbs.db
 dist/
 build/
 
+# Automated test artifacts
+.tmp/
+playwright-report/
+test-results/
+

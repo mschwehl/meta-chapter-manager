@@ -49,7 +49,7 @@
   <div class="flex-1 flex flex-col min-w-0">
 
     <!-- ─── Top Bar ─── -->
-    <header class="h-[3.25rem] bg-topbar flex items-center justify-between px-3 sm:px-5 shrink-0 relative z-30"
+    <header class="h-[3.25rem] bg-topbar flex items-center justify-between px-3 sm:px-5 lg:px-7 xl:px-10 2xl:px-14 shrink-0 relative z-30"
       style="box-shadow:0 1px 0 rgba(255,255,255,.04), 0 1px 3px rgba(0,0,0,.35)">
 
       <!-- Left cluster -->
@@ -61,7 +61,7 @@
           <div class="w-7 h-7 rounded-[8px] bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white text-[10px] font-black leading-none select-none shadow-sm shadow-blue-500/20 group-hover:shadow-blue-500/40 group-hover:scale-105 transition-all">
             {{ (branding.logoText || 'APP').slice(0,3) }}
           </div>
-          <span class="text-gray-300 text-[13px] font-medium hidden lg:inline tracking-tight group-hover:text-white transition-colors">{{ branding.orgName }}</span>
+          <span class="text-gray-300 text-[13px] font-medium hidden lg:inline tracking-tight group-hover:text-white transition-colors">{{ orgContextLabel }}</span>
         </button>
 
         <!-- Divider -->
@@ -147,15 +147,15 @@
     <main class="flex-1 overflow-y-auto bg-gray-50/80 dark:bg-[#0f1117]">
 
       <!-- ════════ KONTEXT-AUSWAHL ════════ -->
-      <div v-if="mod === 'ctx'" class="min-h-full flex flex-col items-center p-6 pt-16 gap-10">
-        <div class="w-full max-w-2xl">
+      <div v-if="mod === 'ctx'" class="min-h-full flex flex-col items-center p-4 sm:p-6 lg:p-8 pt-12 sm:pt-16 xl:pt-20 gap-8 sm:gap-10">
+        <div class="w-full max-w-3xl xl:max-w-5xl">
           <div class="mb-8 text-center">
             <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-4 text-white text-lg font-bold shadow-sm" style="background:linear-gradient(135deg,#3b82f6,#6366f1)">{{ user.vorname?.[0] || '' }}{{ user.name?.[0] || '' }}</div>
             <h1 class="text-[1.4rem] font-bold text-gray-800 dark:text-gray-100 tracking-tight">{{ greetingText }}, {{ user.vorname }}</h1>
             <p class="text-gray-400 dark:text-gray-500 mt-0.5 text-xs">{{ greetingDate }}</p>
             <p class="text-gray-400 dark:text-gray-500 mt-1 text-sm">Wählen Sie einen Bereich, um zu starten.</p>
           </div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
             <button v-for="opt in ctxOptions" :key="opt.type + (opt.chapterId||'') + (opt.sparteId||'')"
               @click="selectCtx(opt)"
               :style="{ borderLeft: '3px solid ' + ctxColor(opt.color) }"
@@ -182,7 +182,7 @@
         </div>
 
         <!-- Chapter directory (only for plain members — users with no admin roles) -->
-        <div v-if="chapterDirectory.length && !isOrgaAdmin && !isZeitstelle && !hasAnyChapterRole" class="w-full max-w-2xl">
+        <div v-if="chapterDirectory.length && !isOrgaAdmin && !isZeitstelle && !hasAnyChapterRole" class="w-full max-w-3xl xl:max-w-5xl">
           <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 text-center">Verfügbare Verbände</h2>
           <div class="space-y-3">
             <div v-for="ch in chapterDirectory" :key="ch.id"
@@ -221,6 +221,7 @@
       <chapter-manager  v-if="mod === 'chapters'"    @navigate="mod = $event"></chapter-manager>
       <user-admin       v-if="mod === 'useradmin'" @back="mod = 'dashboard'"></user-admin>
       <orga-admin       v-if="mod === 'orga'"></orga-admin>
+      <org-usersyncv    v-if="mod === 'usersyncv'" @back="mod = 'dashboard'"></org-usersyncv>
       <docs-viewer      v-if="mod === 'dokumente'" @back="mod = 'dashboard'"></docs-viewer>
       <user-settings    v-if="mod === 'settings'" @back="mod = 'ctx'" @password-changed="onPasswordChanged"></user-settings>
       <system-info      v-if="mod === 'sysinfo'" @back="mod = 'dashboard'"></system-info>
@@ -313,6 +314,18 @@
   .btn-back:hover { background:#f1f5f9; border-color:#cbd5e1; color:#1e293b; }
   .btn-back svg { width:13px; height:13px; }
 
+  /* ── HD scaling ── */
+  @media (min-width: 1280px) {
+    .ctrl { padding: 10px 14px; font-size: 15px; }
+    .btn { padding: 10px 22px; font-size: 14px; }
+    .btn-sm, .btn-sec, .btn-danger { padding: 7px 15px; font-size: 12px; }
+  }
+
+  @media (min-width: 1920px) {
+    .ctrl { padding: 11px 15px; font-size: 15px; }
+    .btn { padding: 11px 24px; }
+  }
+
   /* ── Dark mode overrides ── */
   .dark .lbl     { color:#94a3b8; }
   .dark .ctrl    { background:#1e2130; border-color:#334155; color:#e2e8f0; }
@@ -376,6 +389,7 @@
 <script src="/components/member-manager.js"></script>
 <script src="/components/chapter-manager.js"></script>
 <script src="/components/orga-admin.js"></script>
+<script src="/components/usersyncv.js"></script>
 <script src="/components/user-admin.js"></script>
 <script src="/components/docs-viewer.js"></script>
 <script src="/components/user-dashboard.js"></script>
@@ -383,7 +397,7 @@
 <script src="/components/system-info.js"></script>
 
 <script>
-const { createApp, ref, reactive, computed, watch, onMounted, provide, nextTick } = Vue;
+const { createApp, ref, reactive, computed, watch, onMounted, onBeforeUnmount, provide, nextTick } = Vue;
 
 const app = createApp({
   components: { McmNotifications },
@@ -400,6 +414,7 @@ const app = createApp({
     const ctx = ref(null);
     const userMenu = ref(false);
     const appVersion = ref('');
+    const org = ref(null);
 
     // ── Silent token refresh ──
     // Decodes JWT exp (no library needed) and schedules a refresh 10 min before expiry.
@@ -470,6 +485,14 @@ const app = createApp({
       return Object.values(user.value.roles || {}).some(r => r.level === ROLE_LEVEL.CHAPTER);
     });
     const hasAnyChapterRole = computed(() => Object.keys(user.value.roles || {}).length > 0);
+    const organisationLabel = computed(() => {
+      const name = String(org.value?.name || '').trim();
+      return name || 'Organisation';
+    });
+    const orgContextLabel = computed(() => {
+      const name = String(org.value?.name || '').trim();
+      return name || 'Meine Organisation';
+    });
 
     // ── Module definitions ──
     const allModules = [
@@ -479,9 +502,15 @@ const app = createApp({
       { id: 'members',    icon: '👥', label: 'Mitglieder',    need: 'orga' },
       { id: 'chapters',   icon: '🏢', label: 'Verband',       need: 'super' },
       { id: 'orga',       icon: '🏛', label: 'Organisation',  need: 'orga' },
+      { id: 'usersyncv',  icon: '🔄', label: 'UserSyncV',     need: 'orga' },
       { id: 'dokumente',  icon: '📂', label: 'Dokumente',     need: 'zeit' },
       { id: 'settings',   icon: '⚙️', label: 'Einstellungen' },
     ];
+    const moduleWithResolvedLabel = (m) => {
+      if (!m) return m;
+      if (m.id === 'orga') return { ...m, label: organisationLabel.value };
+      return m;
+    };
     const visibleModules = computed(() => allModules.filter(m => {
       if (m.separator) {
         if (m.need === 'zeit') return isZeitstelle.value || isOrgaAdmin.value;
@@ -493,8 +522,8 @@ const app = createApp({
       if (m.need === 'orga')     return isOrgaAdmin.value;
       if (m.need === 'zeit')     return isZeitstelle.value || isOrgaAdmin.value;
       return true;
-    }));
-    const currentModule = computed(() => allModules.find(m => m.id === mod.value));
+    }).map(moduleWithResolvedLabel));
+    const currentModule = computed(() => moduleWithResolvedLabel(allModules.find(m => m.id === mod.value)));
 
     // Per-context module tabs
     const ctxModules = computed(() => {
@@ -542,21 +571,80 @@ const app = createApp({
 
     // ── Git sync status ──
     const syncing = ref(false);
-    const syncStatus = ref({ label: 'Sync', cls: 'text-gray-400', text: 'Manueller Sync' });
+    const syncPendingPushCount = ref(0);
+    const syncStatus = ref({ label: 'Sync', cls: 'text-gray-400', text: 'Keine offenen Commits' });
+    let _syncStatusResetTimer = null;
+    let _syncStatusPollTimer = null;
+
+    function syncIdleLabel() {
+      return syncPendingPushCount.value > 0
+        ? `Sync (${syncPendingPushCount.value})`
+        : 'Sync';
+    }
+    function syncIdleText() {
+      return syncPendingPushCount.value > 0
+        ? `${syncPendingPushCount.value} offene Commits zum Push`
+        : 'Keine offenen Commits';
+    }
+    function setSyncIdleStatus() {
+      syncStatus.value = { label: syncIdleLabel(), cls: 'text-gray-400', text: syncIdleText() };
+    }
+    async function loadSyncStatus() {
+      if (!isOrgaAdmin.value) return;
+      try {
+        const r = await api('/api/sync/status');
+        if (!r.ok) return;
+        const d = await r.json();
+        const count = Number.parseInt(d.pendingPushCount, 10);
+        syncPendingPushCount.value = Number.isFinite(count) && count > 0 ? count : 0;
+        if (!syncing.value && !_syncStatusResetTimer) setSyncIdleStatus();
+      } catch {
+        if (!syncing.value && !_syncStatusResetTimer) {
+          syncStatus.value = { label: syncIdleLabel(), cls: 'text-gray-400', text: 'Sync-Status nicht verfügbar' };
+        }
+      }
+    }
+    function startSyncStatusPolling() {
+      if (_syncStatusPollTimer) clearInterval(_syncStatusPollTimer);
+      loadSyncStatus();
+      _syncStatusPollTimer = setInterval(loadSyncStatus, 20000);
+    }
+    function stopSyncStatusPolling() {
+      if (_syncStatusPollTimer) {
+        clearInterval(_syncStatusPollTimer);
+        _syncStatusPollTimer = null;
+      }
+      if (_syncStatusResetTimer) {
+        clearTimeout(_syncStatusResetTimer);
+        _syncStatusResetTimer = null;
+      }
+    }
+
     async function triggerSync() {
       if (syncing.value) return;
       syncing.value = true;
+      if (_syncStatusResetTimer) {
+        clearTimeout(_syncStatusResetTimer);
+        _syncStatusResetTimer = null;
+      }
       syncStatus.value = { label: 'Sync…', cls: 'text-blue-400', text: 'Synchronisiere…' };
       try {
         const r = await apiPost('/api/sync', {});
         const d = await r.json();
+        const count = Number.parseInt(d.pendingPushCount, 10);
+        if (Number.isFinite(count) && count >= 0) syncPendingPushCount.value = count;
         if (d.pushed) syncStatus.value = { label: 'Sync ✓', cls: 'text-green-400', text: 'Gepusht' };
         else if (d.committed) syncStatus.value = { label: 'Sync ✓', cls: 'text-green-400', text: 'Committed' };
         else syncStatus.value = { label: 'Sync –', cls: 'text-gray-400', text: d.message || 'Keine Änderungen' };
       } catch { syncStatus.value = { label: 'Sync ✗', cls: 'text-red-400', text: 'Fehler' }; }
       syncing.value = false;
-      setTimeout(() => { syncStatus.value = { label: 'Sync', cls: 'text-gray-400', text: 'Manueller Sync' }; }, 4000);
+      _syncStatusResetTimer = setTimeout(() => {
+        _syncStatusResetTimer = null;
+        setSyncIdleStatus();
+      }, 4000);
+      await loadSyncStatus();
     }
+    setSyncIdleStatus();
 
     // ── Shared helpers ──
     function statusCls(s) {
@@ -578,7 +666,6 @@ const app = createApp({
 
     // ── Shared data (needed by multiple components) ──
     const prChapters = ref([]);
-    const org = ref(null);
     const chapterDirectory = ref([]);
     const userNameCache = reactive({});
 
@@ -637,6 +724,7 @@ const app = createApp({
             // Own profile changed (e.g. role update by admin) — refresh
             api('/api/me').then(r => r.json()).then(u => { user.value = u; MCM_STORE.set('user', JSON.stringify(u)); }).catch(() => {});
           }
+          if (isOrgaAdmin.value) loadSyncStatus();
         } catch {}
       });
       _evtSource.onopen = () => { serverOnline.value = true; };
@@ -712,12 +800,17 @@ const app = createApp({
       if (m === 'orga') { loadOrg(); }
     });
 
+    watch(isOrgaAdmin, (orgaAdmin) => {
+      if (orgaAdmin) startSyncStatusPolling();
+      else stopSyncStatusPolling();
+    }, { immediate: true });
+
     // ── Context (role picker) ──
     const ctxOptions = computed(() => {
       const opts = [];
       const roles = user.value.roles || {};
       if (isOrgaAdmin.value)
-        opts.push({ type: 'orgadmin', label: 'Meine Organisation', role: 'Organisations-Admin', detail: null, icon: '🏛', desc: 'Verbände, Benutzer, Anfragen und Organisation verwalten', color: 'rose' });
+        opts.push({ type: 'orgadmin', label: orgContextLabel.value, role: 'Organisations-Admin', detail: null, icon: '🏛', desc: 'Verbände, Benutzer, Anfragen und Stammdaten verwalten', color: 'rose' });
       if (isZeitstelle.value)
         opts.push({ type: 'zeitstelle', label: 'Freigaben & Dokumente', role: 'Zeitstelle', detail: null, icon: '⏱', desc: 'Freigabelisten prüfen und Dokumente verwalten', color: 'amber' });
       for (const [cid, role] of Object.entries(roles)) {
@@ -780,6 +873,14 @@ const app = createApp({
       }
     });
 
+    onBeforeUnmount(() => {
+      clearTimeout(_refreshTimer);
+      clearTimeout(_uPickTimer);
+      if (_pingTimer) clearInterval(_pingTimer);
+      if (_evtSource) _evtSource.close();
+      stopSyncStatusPolling();
+    });
+
     return {
       user, i18n, mod, visibleModules, currentModule,
       isOrgaAdmin, isZeitstelle, isChapterAdminAnywhere, hasAnyChapterRole,
@@ -792,6 +893,7 @@ const app = createApp({
       mustChange,
       onPasswordChanged,
       notify,
+      orgContextLabel,
       branding: window.APP_BRANDING || {},
       ctxColor: (c) => ({ rose:'#f43f5e', amber:'#f59e0b', purple:'#9333ea', teal:'#0d9488', blue:'#3b82f6', gray:'#94a3b8' })[c] || '#3b82f6',
     };
@@ -810,6 +912,7 @@ app.component('pruefe-wizard', PruefeWizard);
 app.component('member-manager', MemberManager);
 app.component('chapter-manager', ChapterManager);
 app.component('orga-admin', OrgaAdmin);
+app.component('org-usersyncv', OrgUserSyncV);
 app.component('user-admin', UserAdmin);
 app.component('docs-viewer', DocsViewer);
 app.component('user-dashboard', UserDashboard);

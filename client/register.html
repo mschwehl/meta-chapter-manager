@@ -110,7 +110,7 @@
         <form @submit.prevent="submit" class="space-y-4">
           <div>
             <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1.5" style="color:#64748b">Kürzel *</label>
-            <input v-model="form.kuerzel" type="text" placeholder="z.B. m123" autocomplete="username" class="auth-input" required />
+            <input v-model="form.kuerzel" @input="form.kuerzel = (form.kuerzel || '').toLowerCase()" type="text" placeholder="z.B. m123" autocomplete="username" class="auth-input" required />
             <p class="text-[11px] mt-1" style="color:#94a3b8">Kleinbuchstaben + Ziffern, z.B. s888</p>
           </div>
 
@@ -123,6 +123,34 @@
               <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1.5" style="color:#64748b">Vorname *</label>
               <input v-model="form.vorname" type="text" placeholder="Max" class="auth-input" required />
             </div>
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1.5" style="color:#64748b">Business Mail *</label>
+            <input v-model="form.businessMail" type="email" placeholder="name@organisation.de" autocomplete="email" class="auth-input" required />
+          </div>
+
+          <div class="rounded-lg border p-3 space-y-3" style="border-color:#dbeafe;background:#f8fbff">
+            <div class="text-[11px] font-semibold uppercase tracking-wider" style="color:#64748b">Optional: Wunsch-Verband</div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1.5" style="color:#64748b">Verband</label>
+                <select v-model="form.chapterId" @change="onChapterChange" class="auth-input" :disabled="optionsLoading">
+                  <option value="">Kein Wunsch</option>
+                  <option v-for="ch in registerOptions" :key="ch.id" :value="ch.id">{{ ch.name }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1.5" style="color:#64748b">Sparte</label>
+                <select v-model="form.sparte" class="auth-input" :disabled="!form.chapterId || optionsLoading">
+                  <option value="">Keine Sparte</option>
+                  <option v-for="sp in selectedSparten" :key="sp.id" :value="sp.id">{{ sp.name }}</option>
+                </select>
+              </div>
+            </div>
+            <p class="text-[11px]" style="color:#64748b">
+              Freigabe erfolgt durch Verband-Admin oder Organisations-Admin. Nach Freigabe liegt das Konto im Organisations-Pool.
+            </p>
           </div>
 
           <div>
@@ -154,23 +182,64 @@
 
   <script src="/vendor/vue.global.prod.js"></script>
   <script>
-    const { createApp, ref, reactive } = Vue;
+    const { createApp, ref, reactive, computed, onMounted } = Vue;
 
     createApp({
       setup() {
-        const form = reactive({ kuerzel: '', name: '', vorname: '', bemerkung: '' });
+        const form = reactive({ kuerzel: '', name: '', vorname: '', businessMail: '', chapterId: '', sparte: '', bemerkung: '' });
+        const registerOptions = ref([]);
+        const optionsLoading = ref(false);
         const error = ref('');
         const loading = ref(false);
         const sent = ref(false);
+
+        const selectedSparten = computed(() => {
+          const chapter = registerOptions.value.find(ch => ch.id === form.chapterId);
+          return chapter?.sparten || [];
+        });
+
+        function onChapterChange() {
+          if (!form.chapterId) {
+            form.sparte = '';
+            return;
+          }
+          if (!selectedSparten.value.some(sp => sp.id === form.sparte)) {
+            form.sparte = '';
+          }
+        }
+
+        async function loadRegisterOptions() {
+          optionsLoading.value = true;
+          try {
+            const res = await fetch('/api/auth/register/options');
+            const data = await res.json();
+            registerOptions.value = Array.isArray(data) ? data : [];
+          } catch {
+            registerOptions.value = [];
+          } finally {
+            optionsLoading.value = false;
+          }
+        }
 
         async function submit() {
           error.value = '';
           form.kuerzel = form.kuerzel.trim().toLowerCase();
           form.name = form.name.trim();
           form.vorname = form.vorname.trim();
+          form.businessMail = form.businessMail.trim().toLowerCase();
+          form.chapterId = form.chapterId.trim();
+          form.sparte = form.sparte.trim();
           form.bemerkung = form.bemerkung.trim();
           if (!/^[a-z0-9]+$/.test(form.kuerzel)) {
             error.value = 'Kürzel darf nur Kleinbuchstaben und Ziffern enthalten.';
+            return;
+          }
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.businessMail)) {
+            error.value = 'Bitte eine gültige Business-Mail angeben.';
+            return;
+          }
+          if ((form.chapterId && !form.sparte) || (!form.chapterId && form.sparte)) {
+            error.value = 'Bitte Verband und Sparte gemeinsam auswählen.';
             return;
           }
           loading.value = true;
@@ -178,7 +247,15 @@
             const res = await fetch('/api/auth/register', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ kuerzel: form.kuerzel, name: form.name, vorname: form.vorname, bemerkung: form.bemerkung })
+              body: JSON.stringify({
+                kuerzel: form.kuerzel,
+                name: form.name,
+                vorname: form.vorname,
+                businessMail: form.businessMail,
+                chapterId: form.chapterId,
+                sparte: form.sparte,
+                bemerkung: form.bemerkung,
+              })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Fehler beim Senden');
@@ -190,7 +267,9 @@
           }
         }
 
-        return { form, error, loading, sent, submit, branding: window.APP_BRANDING };
+        onMounted(loadRegisterOptions);
+
+        return { form, registerOptions, optionsLoading, selectedSparten, onChapterChange, error, loading, sent, submit, branding: window.APP_BRANDING };
       }
     }).mount('#app');
   </script>

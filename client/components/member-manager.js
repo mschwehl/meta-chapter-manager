@@ -115,7 +115,17 @@ const MemberManager = {
       if (k.typ === 'email' && k.attribut) return `${k.typ} (${k.attribut}): ${k.wert}`;
       return `${k.typ}: ${k.wert}`;
     },
-    canEditChapter(cid) { return this.isOrgaAdmin || (this.user.roles || {})[cid]?.level === ROLE_LEVEL.CHAPTER; },
+    canManageMembership(chapterId, sparteId = '') {
+      if (this.isOrgaAdmin) return false;
+      const role = (this.user.roles || {})[chapterId];
+      if (!role) return false;
+      if (role.level === ROLE_LEVEL.CHAPTER) return true;
+      if (role.level === ROLE_LEVEL.SPARTE) return !!sparteId && (role.sparten || []).includes(sparteId);
+      return false;
+    },
+    canManageAnyMembership() {
+      return !this.isOrgaAdmin && this.accessibleChapters.length > 0;
+    },
     select(u) { this.selected = u; this.edit = null; this.error = ''; this.chapterError = ''; },
     startEdit(u) { this.edit = { name: u.name, vorname: u.vorname, orgeinheit: u.orgeinheit || '', kontakte: this.normalizeContactsForForm(u.kontakte) }; this.error = ''; },
     async load() {
@@ -212,10 +222,17 @@ const MemberManager = {
 <div class="p-6 max-w-7xl mx-auto">
   <div class="flex rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden" style="height: calc(100vh - 8.5rem);">
     <!-- Master -->
-    <div class="w-80 lg:w-96 border-r border-gray-200 flex flex-col shrink-0 min-h-0">
+    <div :class="selected ? 'hidden lg:flex' : 'flex'" class="w-full lg:w-96 border-r border-gray-200 flex-col shrink-0 min-h-0">
       <div class="px-4 py-3 border-b border-gray-100 space-y-2 shrink-0">
         <div class="flex items-center justify-between">
           <h2 class="font-semibold text-gray-700 text-sm">Mitglieder</h2>
+          <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
+            :class="isOrgaAdmin ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'">
+            {{ isOrgaAdmin ? 'Read-only für Mitgliedschaften' : 'Mitgliedschaften bearbeitbar' }}
+          </span>
+        </div>
+        <div v-if="isOrgaAdmin" class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+          Organisations-Admins können Nutzer sehen und Stammdaten pflegen, aber Chapter-Mitgliedschaften nicht verändern.
         </div>
         <!-- OrgAdmin: chapter switcher + optional sparte filter -->
         <template v-if="isOrgaAdmin">
@@ -254,6 +271,7 @@ const MemberManager = {
             </div>
           </div>
         </div>
+        <p class="text-[10px] text-gray-400">Tipp: Kürzel oder Name eingeben, danach Person in der Detailansicht öffnen.</p>
       </div>
       <div class="flex-1 overflow-y-auto">
         <div v-if="loading" class="p-6 text-center text-gray-400 text-xs animate-pulse">Laden …</div>
@@ -271,15 +289,19 @@ const MemberManager = {
               class="text-[10px]">{{ isOrgaAdmin ? (i18n.chapter(ch.chapterId) + ' · ') : '' }}{{ i18n.sparte(ch.sparte) }}</span>
           </div>
         </div>
-        <div v-if="!loading && !filtered.length" class="p-6 text-center text-gray-300 text-xs">Keine Treffer</div>
+        <div v-if="!loading && !filtered.length" class="p-6 text-center text-xs">
+          <div class="text-gray-400 font-semibold">Keine Treffer</div>
+          <div class="text-gray-300 mt-1">Filter anpassen oder im Benutzerpool suchen.</div>
+        </div>
       </div>
       <div class="px-4 py-2 border-t border-gray-100 text-[10px] text-gray-400 shrink-0">{{ filtered.length }} Mitglieder</div>
     </div>
     <!-- Detail -->
-    <div class="flex-1 overflow-y-auto bg-gray-50 min-h-0">
-      <div v-if="!selected" class="flex items-center justify-center h-full text-gray-300 text-sm">← Mitglied auswählen</div>
+    <div :class="selected ? 'block' : 'hidden lg:block'" class="flex-1 overflow-y-auto bg-gray-50 min-h-0">
+      <div v-if="!selected" class="hidden lg:flex items-center justify-center h-full text-gray-300 text-sm">← Mitglied auswählen</div>
       <!-- Detail card -->
       <div v-if="selected" class="p-6 max-w-2xl mx-auto space-y-4">
+        <button @click="selected = null" class="lg:hidden btn-back"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>Zurück zur Liste</button>
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div class="flex items-center justify-between mb-1">
             <div>
@@ -334,16 +356,22 @@ const MemberManager = {
         </div>
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Verband-Mitgliedschaften</div>
+          <div v-if="isOrgaAdmin" class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
+            Diese Mitgliedschaften sind für Organisations-Admins in dieser Ansicht nur lesbar.
+          </div>
           <div v-for="ch in (selected.chapters || [])" :key="ch.chapterId + ch.sparte"
             class="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
             <span class="text-sm text-gray-700 font-medium">{{ i18n.chapter(ch.chapterId) }}</span>
             <span class="text-sm text-gray-500">{{ i18n.sparte(ch.sparte) }}</span>
             <status-badge :active="isActive(ch)" />
             <span class="text-gray-400 text-xs ml-auto">{{ ch.eintrittsdatum }}<span v-if="ch.austrittsdatum"> – {{ ch.austrittsdatum }}</span></span>
-            <button v-if="canEditChapter(ch.chapterId)" @click="removeChapter(ch)" class="text-red-400 hover:text-red-600 text-xs ml-2">✕</button>
+            <button v-if="canManageMembership(ch.chapterId, ch.sparte)" @click="removeChapter(ch)" class="text-red-400 hover:text-red-600 text-xs ml-2">✕</button>
           </div>
-          <div v-if="!selected.chapters?.length" class="text-gray-300 text-xs py-2 text-center">Keine Mitgliedschaften</div>
-          <div v-if="isChapterAdminAnywhere || hasAnyChapterRole" class="mt-4 pt-4 border-t border-gray-100">
+          <div v-if="!selected.chapters?.length" class="text-xs py-2 text-center">
+            <div class="text-gray-400 font-semibold">Keine Mitgliedschaften</div>
+            <div class="text-gray-300 mt-1">Lege unten eine neue Mitgliedschaft an.</div>
+          </div>
+          <div v-if="canManageAnyMembership()" class="mt-4 pt-4 border-t border-gray-100">
             <div class="text-xs font-semibold text-gray-500 mb-2">Mitgliedschaft hinzufügen</div>
             <div class="flex items-end gap-2 flex-wrap">
               <div class="flex-1 min-w-[120px]">
@@ -371,6 +399,9 @@ const MemberManager = {
               <button @click="addChapter" :disabled="!addCh.chapterId || !addCh.sparte" class="btn-sm text-xs">+ Hinzufügen</button>
             </div>
             <div v-if="chapterError" class="mt-2 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">{{ chapterError }}</div>
+          </div>
+          <div v-else-if="hasAnyChapterRole" class="mt-4 pt-4 border-t border-gray-100 text-[11px] text-gray-400">
+            Für diese Kombination aus Rolle und Sparte sind keine Mitgliedschaftsänderungen möglich.
           </div>
         </div>
       </div>

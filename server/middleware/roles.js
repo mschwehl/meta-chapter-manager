@@ -17,6 +17,21 @@ function canManageChapterSparte(user, chapterId, sparte) {
 }
 
 /**
+ * Returns true if the user may mutate chapter memberships.
+ * Explicitly excludes orgaAdmin/zeitstelle to enforce the boundary:
+ * orga app must not perform chapter membership add/include/update/remove.
+ */
+function canManageChapterMembership(user, chapterId, sparte) {
+  if (!user) return false;
+  if (user.orgaAdmin || user.zeitstelle) return false;
+  const r = user.roles?.[chapterId];
+  if (!r) return false;
+  if (r.level === ROLE_LEVEL.CHAPTER) return true;
+  if (r.level === ROLE_LEVEL.SPARTE) return !!sparte && r.sparten.includes(sparte);
+  return false;
+}
+
+/**
  * Middleware: nur für Chapter-Admins des angegebenen Chapters
  * oder Orga-Admins / Zeitstelle (haben Zugriff auf alle Chapters)
  */
@@ -47,4 +62,10 @@ function requireZeitstelleOrAdmin(req, res, next) {
   return res.status(403).json({ error: 'Zugriff verweigert – Zeitstelle oder Admin-Berechtigung erforderlich' });
 }
 
-module.exports = { requireChapterAdmin, requireOrgaAdmin, requireZeitstelleOrAdmin, canManageChapterSparte };
+module.exports = {
+  requireChapterAdmin,
+  requireOrgaAdmin,
+  requireZeitstelleOrAdmin,
+  canManageChapterSparte,
+  canManageChapterMembership,
+};

@@ -5,6 +5,13 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "setup": "node server/setup.js"
+    "setup": "node server/setup.js",
+    "test:e2e": "playwright test",
+    "test:api": "playwright test tests/api --project=api",
+    "test:gui": "playwright test tests/gui --project=gui",
+    "test:install": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2"
   }
 }

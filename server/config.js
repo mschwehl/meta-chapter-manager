@@ -43,6 +43,19 @@ const config = {
   // Branch to use in the database repo
   gitDbBranch: process.env.GIT_DB_BRANCH || 'develop',
 
+  // Sync strategy:
+  //   action-based : push after each successful write + timer fallback + manual/shutdown
+  //   timer-based  : commit on write, push by timer + manual/shutdown
+  //   manual-only  : commit on write, push only manual + shutdown
+  gitSyncStrategy: String(process.env.GIT_SYNC_STRATEGY || 'action-based').trim().toLowerCase(),
+
+  // Autosync interval in milliseconds (used for timer-based sync/fallback)
+  gitAutoSyncIntervalMs: parseInt(process.env.GIT_AUTOSYNC_INTERVAL_MS || '300000', 10),
+
+  // Optional fixed bootstrap admin password (useful for integration tests).
+  // If empty, a random password is generated on first bootstrap.
+  bootstrapAdminPassword: process.env.BOOTSTRAP_ADMIN_PASSWORD || '',
+
   // Local working directory where the database repo gets cloned to
   dataDir: process.env.DATA_DIR || path.join(__dirname, '..', 'data'),
 

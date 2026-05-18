@@ -105,7 +105,7 @@ const EventsList = {
     }
   },
   template: `
-<div class="p-6 max-w-6xl mx-auto space-y-4">
+<div class="p-4 sm:p-6 lg:p-8 max-w-6xl xl:max-w-7xl 2xl:max-w-[96rem] mx-auto space-y-4">
   <!-- Header -->
   <div class="flex items-center justify-between flex-wrap gap-3">
     <div class="flex items-center gap-3">
@@ -133,7 +133,7 @@ const EventsList = {
   <!-- Create form -->
   <div v-if="showCreate" class="bg-white dark:bg-[#1a1d27] rounded-xl shadow-sm border border-gray-100 dark:border-[#2d3148] p-5">
     <h3 class="font-semibold text-gray-700 dark:text-gray-200 mb-4 text-sm">Neue Veranstaltung anlegen</h3>
-    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
       <div v-if="!singleChapter">
         <label class="lbl">Verband</label>
         <select v-model="evNew.chapterId" @change="onChapterChange" class="ctrl text-xs">
@@ -169,7 +169,8 @@ const EventsList = {
       <button v-if="filter.status" @click="filter.status = ''; load()" class="mt-3 text-xs text-blue-600 dark:text-blue-400 hover:underline">Filter zurücksetzen</button>
       <button v-else-if="canCreate" @click="showCreate = true" class="mt-4 btn-sm text-xs">Erste Veranstaltung anlegen</button>
     </div>
-    <table v-else class="w-full text-sm">
+    <div v-else class="overflow-x-auto">
+    <table class="w-full min-w-[60rem] text-sm">
       <thead class="text-gray-500 dark:text-gray-400 text-xs uppercase bg-gray-50 dark:bg-[#1e2130]">
         <tr>
           <th class="px-5 py-2.5 text-left cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 select-none" @click="toggleSort('datum')">
@@ -211,6 +212,7 @@ const EventsList = {
         </tr>
       </tbody>
     </table>
+    </div>
   </div>
 </div>
 `

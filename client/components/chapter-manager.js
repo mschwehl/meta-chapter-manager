@@ -47,7 +47,7 @@ const ChapterManager = {
       // Create user inline
       chUserCreate: null,
       chUserCreateError: '',
-      // Requests (org-admin)
+      // Requests (orga-admin / chapter-admin)
       requests: [],
       rqLoading: false,
       rqError: '',
@@ -60,8 +60,16 @@ const ChapterManager = {
   },
   methods: {
     // ── Role helpers ──
-    canEditChapterStructure(cid) { return this.canManageChapterMembers(cid); },
+    canEditChapterStructure(cid) { return this.isOrgaAdmin || this.canManageChapterMembers(cid); },
     canManageChapterMembers(cid) { return (this.user.roles || {})[cid]?.level === ROLE_LEVEL.CHAPTER; },
+    canReviewRequests() {
+      if (this.isOrgaAdmin) return true;
+      return Object.values(this.user.roles || {}).some(role => role?.level === ROLE_LEVEL.CHAPTER);
+    },
+    requestTargetText(rq) {
+      if (!rq?.chapterId || !rq?.sparte) return 'Kein Verband/Sparte ausgewählt';
+      return `${this.i18n.chapter(rq.chapterId)} · ${this.i18n.sparte(rq.sparte)}`;
+    },
 
     // ── Name loading ──
     async loadNamesForList(kuerzels) {
@@ -248,6 +256,19 @@ const ChapterManager = {
       this.chEintritt[chId + '_search'] = `${u.vorname} ${u.name}`;
       this.chEintritt[chId + '_results'] = [];
     },
+    chStartEintritt(chId) {
+      this.chEintritt[chId + '_search'] = '';
+      this.chEintritt[chId + '_kuerzel'] = '';
+      this.chEintritt[chId + '_sparte'] = '';
+      this.chEintritt[chId + '_error'] = '';
+      this.$nextTick(() => {
+        const input = this.$el?.querySelector(`input[data-eintritt-search="${chId}"]`);
+        if (input) {
+          input.focus();
+          input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      });
+    },
     chEintrittKeydown(chId, e) {
       const res = this.chEintritt[chId + '_results'] || [];
       const cur = this.chEintritt[chId + '_activeIdx'] ?? -1;
@@ -311,9 +332,18 @@ const ChapterManager = {
 
     // ── Requests ──
     async loadRequests() {
-      if (!this.isOrgaAdmin) return;
+      if (!this.canReviewRequests()) return;
       this.rqLoading = true;
-      try { const r = await this.api('/api/admin/requests'); this.requests = await r.json(); } catch {} finally { this.rqLoading = false; }
+      this.rqError = '';
+      try {
+        const r = await this.api('/api/admin/requests');
+        if (!r.ok) { this.rqError = (await r.json()).error || 'Fehler beim Laden'; this.requests = []; return; }
+        const data = await r.json();
+        this.requests = Array.isArray(data) ? data : [];
+      } catch (e) {
+        this.rqError = e.message;
+        this.requests = [];
+      } finally { this.rqLoading = false; }
     },
     async rqApprove(kuerzel) {
       this.rqError = '';
@@ -379,7 +409,7 @@ const ChapterManager = {
       if (!evt) return;
       if (evt.category === 'chapter' || evt.category === 'sparte') this.loadChaptersList();
       if (evt.category === 'organisation') this.loadOrgAdmins();
-      if (evt.category === 'user' || evt.category === 'request') { this.loadChapterMembers(); if (this.isOrgaAdmin) this.loadRequests(); }
+      if (evt.category === 'user' || evt.category === 'request') { this.loadChapterMembers(); if (this.canReviewRequests()) this.loadRequests(); }
     },
   },
   mounted() {
@@ -388,18 +418,19 @@ const ChapterManager = {
       this.chSelected = this.ctx.chapterId;
     }
     this.loadChaptersList();
-    if (this.isOrgaAdmin) { this.loadRequests(); this.loadOrgAdmins(); }
+    if (this.canReviewRequests()) this.loadRequests();
+    if (this.isOrgaAdmin) this.loadOrgAdmins();
   },
   template: `
 <div>
   <!-- A: Overview -->
-  <div v-if="!chSelected && !chEdit" class="p-6 max-w-5xl mx-auto space-y-8">
-    <!-- Requests (org-admin) -->
-    <div v-if="isOrgaAdmin && (rqLoading || requests.length)" class="bg-white rounded-xl shadow-sm border border-amber-100">
+  <div v-if="!chSelected && !chEdit" class="p-4 sm:p-6 lg:p-8 max-w-6xl xl:max-w-7xl 2xl:max-w-[96rem] mx-auto space-y-8">
+    <!-- Requests (orga-admin / chapter-admin) -->
+    <div v-if="canReviewRequests() && (rqLoading || requests.length)" class="bg-white rounded-xl shadow-sm border border-amber-100">
       <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
         <div class="flex items-center gap-2">
           <span>📬</span>
-          <span class="font-semibold text-gray-800 text-sm">Registrierungsanfragen</span>
+          <span class="font-semibold text-gray-800 text-sm">Registrierungsanfragen (Org-Pool)</span>
           <span v-if="requests.length" class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{{ requests.length }}</span>
         </div>
         <button @click="loadRequests" class="text-gray-400 hover:text-gray-600 text-sm">↻</button>
@@ -410,6 +441,8 @@ const ChapterManager = {
           <div>
             <span class="font-semibold text-sm text-gray-800">{{ rq.vorname }} {{ rq.name }}</span>
             <span class="font-mono text-blue-600 text-xs ml-1.5">{{ rq.kuerzel }}</span>
+            <div v-if="rq.businessMail" class="text-gray-500 text-xs mt-0.5">Business-Mail: {{ rq.businessMail }}</div>
+            <div class="text-gray-500 text-xs mt-0.5">Wunsch: {{ requestTargetText(rq) }}</div>
             <div v-if="rq.bemerkung" class="text-gray-500 text-xs italic mt-0.5">„{{ rq.bemerkung }}"</div>
             <div class="text-gray-400 text-[11px]">{{ new Date(rq.requestedAt).toLocaleString('de-DE') }}</div>
           </div>
@@ -430,7 +463,7 @@ const ChapterManager = {
       </div>
       <hr class="border-gray-200 mb-4" />
       <div v-if="!chaptersList.length" class="text-center text-gray-400 text-sm py-10">Keine Verbände vorhanden.</div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         <button v-for="ch in chaptersList" :key="ch.id"
           @click="chSelected = ch.id; chSelectedSparte = null; chMbToggle(ch.id)"
           class="text-left bg-white rounded-2xl border border-gray-200 p-5 hover:border-blue-400 hover:shadow-md transition-all group focus:outline-none focus:ring-2 focus:ring-blue-400">
@@ -461,7 +494,7 @@ const ChapterManager = {
         <span class="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Veranstaltungen</span>
       </div>
       <hr class="border-gray-200 mb-4" />
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         <button @click="$emit('navigate','events')"
           class="text-left bg-white rounded-2xl border border-gray-200 p-5 hover:border-green-400 hover:shadow-md transition-all group focus:outline-none focus:ring-2 focus:ring-green-400">
           <div class="flex items-start justify-between mb-3">
@@ -482,7 +515,7 @@ const ChapterManager = {
         <span class="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Benutzer</span>
       </div>
       <hr class="border-gray-200 mb-4" />
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         <button @click="$emit('navigate','useradmin')"
           class="text-left bg-white rounded-2xl border border-gray-200 p-5 hover:border-indigo-400 hover:shadow-md transition-all group focus:outline-none focus:ring-2 focus:ring-indigo-400">
           <div class="flex items-start justify-between mb-3">
@@ -526,7 +559,7 @@ const ChapterManager = {
   </div>
 
   <!-- B: Edit form -->
-  <div v-else-if="chEdit" class="p-6 max-w-3xl mx-auto space-y-4">
+  <div v-else-if="chEdit" class="p-4 sm:p-6 lg:p-8 max-w-3xl xl:max-w-4xl mx-auto space-y-4">
     <div class="flex items-center gap-3 mb-4">
       <button @click="chEdit = null" class="btn-back"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>Zurück</button>
       <span class="text-gray-300">/</span>
@@ -598,7 +631,7 @@ const ChapterManager = {
       <span class="text-gray-300 text-xs">/</span>
       <span class="font-semibold text-gray-800 text-sm">{{ chSparteEdit.mode === 'new' ? 'Neue Sparte' : i18n.sparte(chSparteEdit.sparte.id) }}</span>
     </div>
-    <div class="p-6 max-w-2xl mx-auto">
+    <div class="p-4 sm:p-6 lg:p-8 max-w-3xl xl:max-w-4xl mx-auto">
       <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-5">
         <h3 class="font-semibold text-gray-700 text-lg">{{ chSparteEdit.mode === 'new' ? 'Neue Sparte anlegen' : 'Sparte bearbeiten' }}</h3>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -638,31 +671,44 @@ const ChapterManager = {
   <div v-else-if="chSelected">
     <div v-for="ch in chaptersList.filter(c => c.id === chSelected)" :key="ch.id">
       <!-- Header -->
-      <div class="bg-white border-b border-gray-100 px-5 py-3 flex items-center gap-2.5">
-        <button @click="chSelected = ''" class="btn-back"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>Verbandsübersicht</button>
-        <span class="text-gray-300 text-xs">/</span>
-        <span class="font-semibold text-gray-800 text-sm">{{ ch.name }}</span>
-        <span class="text-gray-400 text-xs font-mono bg-gray-100 px-1.5 py-0.5 rounded ml-1">{{ ch.id }}</span>
+      <div class="bg-white border-b border-gray-100 px-4 sm:px-6 py-3">
+        <div class="max-w-6xl xl:max-w-7xl 2xl:max-w-[96rem] mx-auto flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5">
+            <button @click="chSelected = ''" class="btn-back"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>Verbandsübersicht</button>
+            <span class="text-gray-300 text-xs">/</span>
+            <span class="font-semibold text-gray-800 text-sm">{{ ch.name }}</span>
+            <span class="text-gray-400 text-xs font-mono bg-gray-100 px-1.5 py-0.5 rounded ml-1">{{ ch.id }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button @click="chTab = 'mitglieder'" class="btn-sec text-xs">👥 Mitglieder</button>
+            <button v-if="canManageChapterMembers(ch.id)" @click="chTab = 'mitglieder'" class="btn-sm text-xs">+ Mitglied hinzufügen</button>
+            <button v-if="canEditChapterStructure(ch.id)" @click="chTab = 'einstellungen'" class="btn-sec text-xs">🛡 Admins</button>
+            <button v-if="canEditChapterStructure(ch.id)" @click="chStartEdit(ch)" class="btn-sec text-xs">✏ Verband bearbeiten</button>
+          </div>
+        </div>
       </div>
       <!-- Tabs -->
-      <div class="bg-white border-b border-gray-200 px-6">
-        <nav class="flex gap-6 -mb-px">
+      <div class="bg-white border-b border-gray-200 px-4 sm:px-6">
+        <nav class="max-w-6xl xl:max-w-7xl 2xl:max-w-[96rem] mx-auto flex gap-2 py-3 overflow-x-auto">
           <button v-for="tab in [
-            { key: 'overview', label: 'Übersicht' },
-            { key: 'sparten', label: 'Sparten' },
-            { key: 'mitglieder', label: 'Mitglieder' },
-            { key: 'einstellungen', label: 'Einstellungen' }
-          ].filter(t => t.key !== 'einstellungen' || canManageChapterMembers(ch.id))"
+            { key: 'overview', label: 'Übersicht', hint: 'Status' },
+            { key: 'sparten', label: 'Sparten', hint: 'Struktur' },
+            { key: 'mitglieder', label: 'Mitglieder', hint: 'Eintritt/Austritt' },
+            { key: 'einstellungen', label: 'Einstellungen', hint: 'Admins' }
+          ].filter(t => t.key !== 'einstellungen' || canEditChapterStructure(ch.id))"
             :key="tab.key" @click="chTab = tab.key"
             :class="chTab === tab.key
-              ? 'border-blue-600 text-blue-700 font-semibold'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-            class="py-3 px-1 text-sm border-b-2 transition-colors whitespace-nowrap">{{ tab.label }}</button>
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+            class="px-3.5 py-2 rounded-lg text-sm transition-colors whitespace-nowrap inline-flex items-center gap-2">
+            <span class="font-semibold">{{ tab.label }}</span>
+            <span class="hidden xl:inline text-[10px] opacity-80">{{ tab.hint }}</span>
+          </button>
         </nav>
       </div>
 
       <!-- Tab: Übersicht -->
-      <div v-if="chTab === 'overview'" class="p-6 max-w-5xl mx-auto space-y-5">
+      <div v-if="chTab === 'overview'" class="p-4 sm:p-6 lg:p-8 max-w-6xl xl:max-w-7xl 2xl:max-w-[96rem] mx-auto space-y-5">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
           <div class="flex items-start justify-between gap-6 mb-6">
             <div>
@@ -720,13 +766,14 @@ const ChapterManager = {
             <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide mr-1">Schnellaktionen</span>
             <button v-if="!isOrgaAdmin" @click="$emit('navigate','events')" class="btn-sm">📅 Veranstaltung anlegen</button>
             <button @click="chTab = 'mitglieder'" class="btn-sec text-xs">👥 Mitgliederliste</button>
+            <button v-if="canManageChapterMembers(ch.id)" @click="chTab = 'mitglieder'" class="btn-sm text-xs">+ Mitglied hinzufügen</button>
             <button v-if="canManageChapterMembers(ch.id)" @click="chTab = 'sparten'" class="btn-sec text-xs">🏷 Sparten verwalten</button>
           </div>
         </div>
       </div>
 
       <!-- Tab: Sparten -->
-      <div v-else-if="chTab === 'sparten'" class="p-6 max-w-5xl mx-auto space-y-5">
+      <div v-else-if="chTab === 'sparten'" class="p-4 sm:p-6 lg:p-8 max-w-6xl xl:max-w-7xl 2xl:max-w-[96rem] mx-auto space-y-5">
         <!-- Sparte detail (when selected) -->
         <template v-if="chSelectedSparte">
           <div v-for="sp in ch.sparten.filter(s => s.id === chSelectedSparte)" :key="sp.id"
@@ -761,12 +808,12 @@ const ChapterManager = {
             <div>
               <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Mitglieder ({{ chMbRows(ch.id).filter(r => r.sparte === sp.id && r.status !== 'passiv').length }} aktiv)</div>
               <div class="overflow-x-auto rounded-lg border border-gray-100">
-                <table class="w-full text-xs">
+                <table class="table-fixed w-full min-w-[44rem] text-xs">
                   <thead class="bg-gray-50 text-gray-500 uppercase tracking-wide font-semibold">
                     <tr>
-                      <th class="px-3 py-2 text-left">Kürzel</th><th class="px-3 py-2 text-left">Name</th>
-                      <th class="px-3 py-2 text-left">Vorname</th><th class="px-3 py-2 text-left">Eintritt</th>
-                      <th class="px-3 py-2 text-left">Austritt</th><th class="px-3 py-2 text-left">Status</th>
+                      <th class="px-3 py-2 text-left w-[12%]">Kürzel</th><th class="px-3 py-2 text-left w-[24%]">Name</th>
+                      <th class="px-3 py-2 text-left w-[20%]">Vorname</th><th class="px-3 py-2 text-left w-[16%]">Eintritt</th>
+                      <th class="px-3 py-2 text-left w-[16%]">Austritt</th><th class="px-3 py-2 text-left w-[12%]">Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -818,15 +865,38 @@ const ChapterManager = {
       </div>
 
       <!-- Tab: Mitglieder -->
-      <div v-else-if="chTab === 'mitglieder'" class="p-6 max-w-5xl mx-auto space-y-5">
+      <div v-else-if="chTab === 'mitglieder'" class="p-4 sm:p-6 lg:p-8 max-w-6xl xl:max-w-7xl 2xl:max-w-[96rem] mx-auto space-y-5">
+        <div class="rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-slate-100 p-5 shadow-lg">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div class="text-[11px] uppercase tracking-[0.18em] text-slate-300 font-semibold">Mitglieder aufnehmen</div>
+              <h3 class="text-lg font-semibold mt-1">Pfad: Verband → {{ i18n.chapter(ch.id) }} → Mitglieder</h3>
+              <p class="text-sm text-slate-300 mt-1">Hier werden bestehende Personen aus dem Benutzerpool dem Verband zugewiesen.</p>
+            </div>
+            <button v-if="canManageChapterMembers(ch.id)" @click="chStartEintritt(ch.id)"
+              class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold transition-colors">Neuen Eintrag starten</button>
+          </div>
+          <div class="mt-4 flex flex-wrap gap-2 text-[11px]">
+            <span class="px-2.5 py-1 rounded-full bg-white/10">1. Person suchen</span>
+            <span class="px-2.5 py-1 rounded-full bg-white/10">2. Sparte wählen</span>
+            <span class="px-2.5 py-1 rounded-full bg-white/10">3. Eintritt speichern</span>
+          </div>
+        </div>
+
         <!-- Eintritt form (chapter-admin only) -->
-        <div v-if="canManageChapterMembers(ch.id)" class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Mitglied aus Organisation hinzufügen</div>
-          <div class="flex flex-wrap gap-3 items-end">
-            <div class="flex-1 min-w-36">
+        <div v-if="canManageChapterMembers(ch.id)" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6">
+          <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+            <div>
+              <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Mitglied aus Organisation hinzufügen</div>
+              <p class="text-xs text-gray-400 mt-1">Nur Verband-Admins können Mitglieder im Chapter anlegen oder verschieben.</p>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
+            <div class="lg:col-span-6 min-w-36">
               <label class="text-[10px] text-gray-400 uppercase tracking-wide font-semibold block mb-1">Person suchen</label>
               <div class="relative">
                 <input v-model="chEintritt[ch.id + '_search']" @input="chEintrittSearch(ch.id)" @keydown="chEintrittKeydown(ch.id, $event)"
+                  :data-eintritt-search="ch.id"
                   placeholder="Name, Kürzel oder Organisationseinheit …" class="ctrl text-xs" autocomplete="off" />
                 <div v-if="(chEintritt[ch.id + '_results'] || []).length"
                   class="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden max-h-40 overflow-y-auto">
@@ -845,23 +915,32 @@ const ChapterManager = {
               </div>
               <div v-if="chEintritt[ch.id + '_kuerzel']" class="mt-1 text-xs text-green-700 font-mono font-semibold">✓ {{ chEintritt[ch.id + '_kuerzel'] }}</div>
             </div>
-            <div>
+            <div class="lg:col-span-3">
               <label class="text-[10px] text-gray-400 uppercase tracking-wide font-semibold block mb-1">Sparte</label>
               <select v-model="chEintritt[ch.id + '_sparte']" class="ctrl text-xs">
                 <option value="">– wählen –</option>
                 <option v-for="sp in ch.sparten.filter(s => !s.datumStillgelegt)" :key="sp.id" :value="sp.id">{{ i18n.sparte(sp.id) }}</option>
               </select>
             </div>
-            <div>
+            <div class="lg:col-span-2">
               <label class="text-[10px] text-gray-400 uppercase tracking-wide font-semibold block mb-1">Eintrittsdatum</label>
               <input v-model="chEintritt[ch.id + '_datum']" type="date" class="ctrl text-xs" />
             </div>
-            <button @click="chDoEintritt(ch.id)" :disabled="!chEintritt[ch.id + '_kuerzel'] || !chEintritt[ch.id + '_sparte']" class="btn-sm">Eintritt speichern</button>
+            <div class="lg:col-span-1">
+              <button @click="chDoEintritt(ch.id)" :disabled="!chEintritt[ch.id + '_kuerzel'] || !chEintritt[ch.id + '_sparte']" class="btn-sm w-full">Speichern</button>
+            </div>
           </div>
           <div v-if="chEintritt[ch.id + '_error']" class="mt-2 text-red-600 text-xs">{{ chEintritt[ch.id + '_error'] }}</div>
         </div>
+
+        <div v-else class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <div class="text-sm font-semibold text-amber-800">Mitglieder hinzufügen ist nur als Verband-Admin möglich.</div>
+          <p class="text-xs text-amber-700 mt-1">Wenn du Organisations-Admin bist, weise zuerst im Tab „Einstellungen“ einen Verband-Admin zu.</p>
+          <button v-if="isOrgaAdmin && canEditChapterStructure(ch.id)" @click="chTab = 'einstellungen'" class="mt-3 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 transition-colors">Zu Verband-Admins</button>
+        </div>
+
         <!-- Member table -->
-        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-3">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6 space-y-4">
           <div class="flex items-center justify-between">
             <div class="text-sm font-semibold text-gray-700">Alle Mitglieder des Verbands {{ i18n.chapter(ch.id) }}</div>
             <button @click="exportExcel" class="btn-sec text-xs flex items-center gap-1">📥 Excel</button>
@@ -869,22 +948,29 @@ const ChapterManager = {
           <div v-if="chMbLoading && !chMbLoaded" class="text-center text-gray-400 text-xs py-6 animate-pulse">Laden …</div>
           <template v-else>
             <input v-model="chMbFilter[ch.id]" placeholder="Filtern nach Name, Kürzel oder Sportart …" class="ctrl text-xs" />
-            <div class="overflow-x-auto rounded-lg border border-gray-100">
-              <table class="w-full text-xs">
-                <thead class="bg-gray-50 text-gray-500 uppercase tracking-wide font-semibold">
+            <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-inner">
+              <table class="table-fixed w-full min-w-[64rem] text-xs">
+                <thead class="bg-gray-50 text-gray-500 uppercase tracking-wide font-semibold sticky top-0 z-10">
                   <tr>
-                    <th @click="chMbToggleSort(ch.id, 'kuerzel')" class="px-3 py-2 text-left cursor-pointer hover:text-blue-600 whitespace-nowrap select-none">Kürzel <span v-if="(chMbSort[ch.id]||{}).col==='kuerzel'">{{ (chMbSort[ch.id]||{}).dir==='asc' ? '↑' : '↓' }}</span></th>
-                    <th @click="chMbToggleSort(ch.id, 'vorname')" class="px-3 py-2 text-left cursor-pointer hover:text-blue-600 select-none">Vorname <span v-if="(chMbSort[ch.id]||{}).col==='vorname'">{{ (chMbSort[ch.id]||{}).dir==='asc' ? '↑' : '↓' }}</span></th>
-                    <th @click="chMbToggleSort(ch.id, 'name')" class="px-3 py-2 text-left cursor-pointer hover:text-blue-600 select-none">Name <span v-if="(chMbSort[ch.id]||{}).col==='name'">{{ (chMbSort[ch.id]||{}).dir==='asc' ? '↑' : '↓' }}</span></th>
-                    <th @click="chMbToggleSort(ch.id, 'sparteName')" class="px-3 py-2 text-left cursor-pointer hover:text-blue-600 select-none">Sportart <span v-if="(chMbSort[ch.id]||{}).col==='sparteName'">{{ (chMbSort[ch.id]||{}).dir==='asc' ? '↑' : '↓' }}</span></th>
-                    <th @click="chMbToggleSort(ch.id, 'eintrittsdatum')" class="px-3 py-2 text-left cursor-pointer hover:text-blue-600 select-none whitespace-nowrap">Eintritt <span v-if="(chMbSort[ch.id]||{}).col==='eintrittsdatum'">{{ (chMbSort[ch.id]||{}).dir==='asc' ? '↑' : '↓' }}</span></th>
-                    <th @click="chMbToggleSort(ch.id, 'austrittsdatum')" class="px-3 py-2 text-left cursor-pointer hover:text-blue-600 select-none whitespace-nowrap">Austritt <span v-if="(chMbSort[ch.id]||{}).col==='austrittsdatum'">{{ (chMbSort[ch.id]||{}).dir==='asc' ? '↑' : '↓' }}</span></th>
-                    <th @click="chMbToggleSort(ch.id, 'status')" class="px-3 py-2 text-left cursor-pointer hover:text-blue-600 select-none">Status <span v-if="(chMbSort[ch.id]||{}).col==='status'">{{ (chMbSort[ch.id]||{}).dir==='asc' ? '↑' : '↓' }}</span></th>
+                    <th @click="chMbToggleSort(ch.id, 'kuerzel')" class="px-3 py-2 text-left cursor-pointer hover:text-blue-600 whitespace-nowrap select-none w-[10%]">Kürzel <span v-if="(chMbSort[ch.id]||{}).col==='kuerzel'">{{ (chMbSort[ch.id]||{}).dir==='asc' ? '↑' : '↓' }}</span></th>
+                    <th @click="chMbToggleSort(ch.id, 'vorname')" class="px-3 py-2 text-left cursor-pointer hover:text-blue-600 select-none w-[16%]">Vorname <span v-if="(chMbSort[ch.id]||{}).col==='vorname'">{{ (chMbSort[ch.id]||{}).dir==='asc' ? '↑' : '↓' }}</span></th>
+                    <th @click="chMbToggleSort(ch.id, 'name')" class="px-3 py-2 text-left cursor-pointer hover:text-blue-600 select-none w-[18%]">Name <span v-if="(chMbSort[ch.id]||{}).col==='name'">{{ (chMbSort[ch.id]||{}).dir==='asc' ? '↑' : '↓' }}</span></th>
+                    <th @click="chMbToggleSort(ch.id, 'sparteName')" class="px-3 py-2 text-left cursor-pointer hover:text-blue-600 select-none w-[20%]">Sportart <span v-if="(chMbSort[ch.id]||{}).col==='sparteName'">{{ (chMbSort[ch.id]||{}).dir==='asc' ? '↑' : '↓' }}</span></th>
+                    <th @click="chMbToggleSort(ch.id, 'eintrittsdatum')" class="px-3 py-2 text-left cursor-pointer hover:text-blue-600 select-none whitespace-nowrap w-[12%]">Eintritt <span v-if="(chMbSort[ch.id]||{}).col==='eintrittsdatum'">{{ (chMbSort[ch.id]||{}).dir==='asc' ? '↑' : '↓' }}</span></th>
+                    <th @click="chMbToggleSort(ch.id, 'austrittsdatum')" class="px-3 py-2 text-left cursor-pointer hover:text-blue-600 select-none whitespace-nowrap w-[12%]">Austritt <span v-if="(chMbSort[ch.id]||{}).col==='austrittsdatum'">{{ (chMbSort[ch.id]||{}).dir==='asc' ? '↑' : '↓' }}</span></th>
+                    <th @click="chMbToggleSort(ch.id, 'status')" class="px-3 py-2 text-left cursor-pointer hover:text-blue-600 select-none w-[9%]">Status <span v-if="(chMbSort[ch.id]||{}).col==='status'">{{ (chMbSort[ch.id]||{}).dir==='asc' ? '↑' : '↓' }}</span></th>
                     <th v-if="canManageChapterMembers(ch.id)" class="px-3 py-2 w-8"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-if="!chMbRows(ch.id).length"><td :colspan="canManageChapterMembers(ch.id) ? 8 : 7" class="px-3 py-8 text-center text-gray-300">Keine Mitglieder gefunden.</td></tr>
+                  <tr v-if="!chMbRows(ch.id).length">
+                    <td :colspan="canManageChapterMembers(ch.id) ? 8 : 7" class="px-3 py-8 text-center">
+                      <div class="text-gray-400 font-semibold">Keine Mitglieder gefunden.</div>
+                      <button v-if="canManageChapterMembers(ch.id)" @click="chStartEintritt(ch.id)" class="mt-2 text-xs text-blue-600 hover:text-blue-700 font-semibold">
+                        + Jetzt erstes Mitglied hinzufügen
+                      </button>
+                    </td>
+                  </tr>
                   <template v-for="row in chMbRows(ch.id)" :key="row.kuerzel + '|' + row.sparte">
                   <tr :class="row.status === 'passiv' ? 'row-passiv' : (chAustrittPending[ch.id + '|' + row.kuerzel + '|' + row.sparte] !== undefined ? 'bg-orange-50' : '')"
                     class="border-t border-gray-50 hover:bg-gray-50 transition-colors">
@@ -950,9 +1036,10 @@ const ChapterManager = {
       </div>
 
       <!-- Tab: Einstellungen -->
-      <div v-else-if="chTab === 'einstellungen'" class="p-6 max-w-3xl mx-auto space-y-5">
+      <div v-else-if="chTab === 'einstellungen'" class="p-4 sm:p-6 lg:p-8 max-w-3xl xl:max-w-4xl mx-auto space-y-5">
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
             <h3 class="text-sm font-semibold text-gray-700">Verband-Admins</h3>
+          <p class="text-xs text-gray-500">Hier kannst du Benutzer wie <span class="font-mono">s850</span> als Verband-Admin hinzufügen und speichern.</p>
           <user-picker :picker="chAdminPicker" :name-cache="userNameCache"
             placeholder="Person suchen und hinzufügen …" color="purple" size="md"
               empty-text="Noch kein Verband-Admin ernannt."

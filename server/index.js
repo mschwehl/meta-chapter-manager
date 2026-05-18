@@ -14,7 +14,7 @@ const orgaRoutes = require('./routes/orga');
 const docsRoutes = require('./routes/docs');
 const requestsRoutes = require('./routes/requests');
 const { authMiddleware } = require('./middleware/auth');
-const { initDatabase, startAutoSync, gitCommitAndPush, readUser, readOrganisation, startGitWatchdog, stopGitWatchdog } = require('./lib/gitdb');
+const { initDatabase, startAutoSync, stopAutoSync, gitCommitAndPush, getPendingPushCount, getEffectiveSyncStrategy, readUser, readOrganisation, startGitWatchdog, stopGitWatchdog } = require('./lib/gitdb');
 const sse = require('./lib/sse');
 const { version: APP_VERSION } = require('./package.json');
 const logger = require('./lib/logger');
@@ -49,6 +49,7 @@ app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
 app.use('/api/auth', authRoutes);
 // Public registration: rate-limited, rewrite URL so requestsRouter matches /register
 const registerLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false, message: { error: 'Zu viele Registrierungsversuche. Bitte später erneut versuchen.' } });
+app.get('/api/auth/register/options', (req, res, next) => { req.url = '/register/options'; requestsRoutes(req, res, next); });
 app.post('/api/auth/register', registerLimiter, (req, res, next) => { req.url = '/register'; requestsRoutes(req, res, next); });
 
 // GET /api/status – public, used by SPA to detect demo mode + branding
@@ -146,10 +147,24 @@ app.get('/api/me', authMiddleware, async (req, res) => {
 });
 
 // POST /api/sync – manual git commit + push (orgaAdmin only)
+app.get('/api/sync/status', authMiddleware, async (req, res) => {
+  if (!req.user.orgaAdmin) return res.status(403).json({ error: 'Nur Orga-Admins' });
+  const [syncStrategy, pending] = await Promise.all([
+    getEffectiveSyncStrategy(),
+    getPendingPushCount(),
+  ]);
+  res.json({ syncStrategy, pendingPushCount: pending.pendingPushCount || 0 });
+});
+
+// POST /api/sync – manual git commit + push (orgaAdmin only)
 app.post('/api/sync', authMiddleware, async (req, res) => {
   if (!req.user.orgaAdmin) return res.status(403).json({ error: 'Nur Orga-Admins' });
   const result = await gitCommitAndPush();
-  res.json(result);
+  const [syncStrategy, pending] = await Promise.all([
+    getEffectiveSyncStrategy(),
+    getPendingPushCount(),
+  ]);
+  res.json({ ...result, syncStrategy, pendingPushCount: pending.pendingPushCount || 0 });
 });
 
 // Fallback routes
@@ -185,7 +200,7 @@ async function start() {
   await ensureBootstrapAdmin();
 
   // Start periodic git commit + push (every 5 minutes)
-  startAutoSync();
+  startAutoSync(config.gitAutoSyncIntervalMs);
   // Start git watchdog (checks every 60 s for stuck lock / orphaned processes)
   startGitWatchdog();
 
@@ -204,6 +219,7 @@ start().catch(err => {
 async function shutdown(signal) {
   logger.info('shutdown', { signal });
   stopGitWatchdog();
+  stopAutoSync();
   try {
     const result = await gitCommitAndPush();
     logger.info('shutdown.git', { committed: result.committed, pushed: result.pushed });

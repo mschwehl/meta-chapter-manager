@@ -12,9 +12,9 @@ Data is stored in a plain JSON git repository — no external database required.
 - **Events** — per-chapter event scheduling
 - **Document viewer** — serve PDF/DOCX documents to members
 - **Verification workflow** — configurable pruefe/verify wizard
-- **Git-backed data** — every change is a git commit; push to any git server for backup
+- **Git-backed data** — every change is committed; push strategy is configurable
 - **Demo mode** — automatic demo bootstrap when no data repo is configured
-- **Bootstrap admin** — `admin / admin` (orgAdmin) created automatically on first start
+- **Bootstrap admin** — created automatically on first start (password from `BOOTSTRAP_ADMIN_PASSWORD` or generated)
 
 ---
 
@@ -30,7 +30,7 @@ npm run dev
 ```
 
 Open <http://localhost:3000>  
-Login: **admin / admin** — you will be forced to change the password on first login.
+Login with the initial admin password shown in startup logs (or set `BOOTSTRAP_ADMIN_PASSWORD=admin` for local/dev).
 
 ---
 
@@ -152,9 +152,12 @@ oc get route meta-chapter-manager
 | `GIT_DB_BRANCH` | `develop` | Branch to clone/pull. |
 | `GIT_DB_USER` | _(empty)_ | Username for HTTPS git auth. |
 | `GIT_DB_PASSWORD` | _(empty)_ | Password / personal access token for HTTPS git auth. |
-| `GIT_SSL_VERIFY` | `true` | Set `false` to allow self-signed certificates. |
+| `GIT_SSL_VERIFY` | `false` | Set `true` to enforce HTTPS certificate validation. |
+| `GIT_SYNC_STRATEGY` | `action-based` | Sync strategy: `action-based`, `timer-based`, `manual-only`. |
+| `GIT_AUTOSYNC_INTERVAL_MS` | `300000` | Timer interval for automatic sync checks. |
 | `GIT_DB_AUTHOR_NAME` | `MCM System` | Git commit author name. |
 | `GIT_DB_AUTHOR_EMAIL` | `system@mcm.local` | Git commit author e-mail. |
+| `BOOTSTRAP_ADMIN_PASSWORD` | _(empty)_ | Optional fixed initial admin password (recommended for automated tests). |
 | `CORS_ORIGIN` | _(empty = same-origin)_ | Allowed CORS origin. Use `*` for local cross-origin dev only. |
 | `LOG_LEVEL` | `info` | Log verbosity (`debug`, `info`, `warn`, `error`). |
 | `NODE_ENV` | _(unset)_ | Set to `production` to enforce `JWT_SECRET`. |
@@ -166,7 +169,7 @@ oc get route meta-chapter-manager
 Regardless of whether a data repo was provided or not, the server ensures a bootstrap admin exists on every start:
 
 - **Kürzel:** `admin`  
-- **Passwort:** `admin`  
+- **Passwort:** from `BOOTSTRAP_ADMIN_PASSWORD`, otherwise generated and printed to startup logs  
 - **Rolle:** Organisations-Admin (full access)  
 - **mustChange:** `true` — password change is forced on first login
 
@@ -225,4 +228,10 @@ requests/
   <id>.json                # pending registration requests
 ```
 
-Every write is committed to git automatically. If `GIT_DB_URL` is set the commit is pushed immediately. A background sync runs every 5 minutes as a fallback.
+Every write is committed to git automatically. Push behavior depends on `GIT_SYNC_STRATEGY`:
+
+- `action-based`: push after each write, plus timer/manual/shutdown sync
+- `timer-based`: commit on write, push via timer/manual/shutdown
+- `manual-only`: commit on write, push only via manual sync and shutdown
+
+If the remote is totally clean, the app can bootstrap `GIT_DB_BRANCH` on first push. If the remote already has branches but not `GIT_DB_BRANCH`, startup and push fail explicitly.

@@ -19,6 +19,18 @@ const CRED_CACHE_TTL = 10_000; // 10 seconds
 // Pure in-memory — cleared on pod/server restart (intentional: everyone re-logs in).
 const _revokedAt = new Map();
 
+const SYNC_STRATEGY = Object.freeze({
+  ACTION_BASED: 'action-based',
+  TIMER_BASED: 'timer-based',
+  MANUAL_ONLY: 'manual-only',
+});
+const VALID_SYNC_STRATEGIES = new Set(Object.values(SYNC_STRATEGY));
+
+function normalizeSyncStrategy(strategy) {
+  const value = String(strategy || '').trim().toLowerCase();
+  return VALID_SYNC_STRATEGIES.has(value) ? value : SYNC_STRATEGY.ACTION_BASED;
+}
+
 // Build a simpleGit instance with the process-kill timeout and SSL config always applied.
 // Use this everywhere instead of calling simpleGit() directly so no subprocess can
 // ever block indefinitely and leave a dead daemon thread.
@@ -145,6 +157,46 @@ function buildAuthUrl(url) {
   return parsed.toString();
 }
 
+function buildGitEnv() {
+  const gitEnv = {};
+  if (!config.gitSslVerify) gitEnv.GIT_SSL_NO_VERIFY = '1';
+  return gitEnv;
+}
+
+function parseRemoteHeads(rawOutput) {
+  return String(rawOutput || '')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => line.split(/\s+/)[1] || '')
+    .filter(ref => ref.startsWith('refs/heads/'))
+    .map(ref => ref.replace(/^refs\/heads\//, ''));
+}
+
+async function listRemoteHeadsByUrl(authUrl, gitEnv = buildGitEnv()) {
+  const git = makeGit();
+  const out = await git.env(gitEnv).listRemote(['--heads', authUrl]);
+  return parseRemoteHeads(out);
+}
+
+async function listRemoteHeadsByOrigin(git, gitEnv = buildGitEnv()) {
+  const out = await git.env(gitEnv).listRemote(['--heads', 'origin']);
+  return parseRemoteHeads(out);
+}
+
+async function getEffectiveSyncStrategy() {
+  let strategy = normalizeSyncStrategy(config.gitSyncStrategy);
+  try {
+    const org = await readJson(path.join(DB_PATH, 'organisation.json'));
+    if (org && typeof org === 'object' && org.gitSyncStrategy) {
+      strategy = normalizeSyncStrategy(org.gitSyncStrategy);
+    }
+  } catch {
+    // Keep config default when organisation.json is not available yet.
+  }
+  return strategy;
+}
+
 async function ensureGitIdentity(git) {
   await git.addConfig('user.name',  config.gitDbAuthorName);
   await git.addConfig('user.email', config.gitDbAuthorEmail);
@@ -178,7 +230,8 @@ async function initDatabase() {
         await fs.mkdir(path.join(dir, 'user'),    { recursive: true });
         await fs.mkdir(path.join(dir, 'requests'), { recursive: true });
         await fs.writeFile(orgPath, JSON.stringify({
-          id: 'org', name: '', chapters: [], orgAdmins: [], zeitstelle: []
+          id: 'org', name: '', chapters: [], orgAdmins: [], zeitstelle: [],
+          gitSyncStrategy: normalizeSyncStrategy(config.gitSyncStrategy)
         }, null, 2));
         await git.add('.');
         await git.commit('Init: empty database structure');
@@ -191,30 +244,48 @@ async function initDatabase() {
   }
 
   // Remote URL given – clone or pull
-  const gitEnv = {};
-  if (!config.gitSslVerify) {
-    gitEnv.GIT_SSL_NO_VERIFY = '1';
+  const gitEnv = buildGitEnv();
+  const authUrl = buildAuthUrl(url);
+  const remoteHeads = await listRemoteHeadsByUrl(authUrl, gitEnv);
+  const remoteEmpty = remoteHeads.length === 0;
+  const targetBranchExists = remoteHeads.includes(branch);
+
+  // User requirement: create branch only when the remote is totally clean.
+  // If the remote already has branches but not GIT_DB_BRANCH, fail explicitly.
+  if (!remoteEmpty && !targetBranchExists) {
+    throw new Error(`Remote branch '${branch}' fehlt, obwohl das Remote nicht leer ist`);
   }
 
-  const authUrl = buildAuthUrl(url);
-  try {
-    await fs.access(path.join(dir, '.git'));
-    // Already cloned – update remote URL with credentials, then pull
+  const hasLocalRepo = await fs.access(path.join(dir, '.git')).then(() => true).catch(() => false);
+
+  if (hasLocalRepo) {
+    // Already cloned – update remote URL with credentials, then pull if branch exists.
     const git = makeGit({ baseDir: dir });
     await ensureGitIdentity(git);
     await git.env(gitEnv).remote(['set-url', 'origin', authUrl]);
-    await git.env(gitEnv).pull('origin', branch);
-    logger.info('startup.db', { mode: 'pull', url: url.replace(/:[^@]*@/, ':***@'), branch });
-  } catch {
-    // Not yet cloned – clone
-    const git = makeGit();
-    await git.env(gitEnv).clone(authUrl, dir, ['--branch', branch]);
-    const clonedGit = makeGit({ baseDir: dir });
-    await ensureGitIdentity(clonedGit);
-    // Keep credentials in remote URL for future pushes
-    await clonedGit.env(gitEnv).remote(['set-url', 'origin', authUrl]);
-    logger.info('startup.db', { mode: 'clone', url: url.replace(/:[^@]*@/, ':***@'), branch });
+    if (!remoteEmpty) {
+      await git.env(gitEnv).pull('origin', branch);
+    } else {
+      await git.checkout(['-B', branch]).catch(() => {});
+      logger.info('startup.db.remote_empty', { branch });
+    }
+    logger.info('startup.db', { mode: 'pull', url: url.replace(/:[^@]*@/, ':***@'), branch, remoteEmpty });
+    return;
   }
+
+  // Not yet cloned – clone
+  const git = makeGit();
+  if (remoteEmpty) {
+    await git.env(gitEnv).clone(authUrl, dir);
+  } else {
+    await git.env(gitEnv).clone(authUrl, dir, ['--branch', branch]);
+  }
+  const clonedGit = makeGit({ baseDir: dir });
+  await ensureGitIdentity(clonedGit);
+  // Keep credentials in remote URL for future pushes
+  await clonedGit.env(gitEnv).remote(['set-url', 'origin', authUrl]);
+  await clonedGit.checkout(['-B', branch]).catch(() => {});
+  logger.info('startup.db', { mode: 'clone', url: url.replace(/:[^@]*@/, ':***@'), branch, remoteEmpty });
 }
 
 function getDbPath() { return DB_PATH; }
@@ -226,7 +297,17 @@ async function readJson(filePath) {
   return JSON.parse(content);
 }
 
-async function writeJson(filePath, data, commitMessage, authorKuerzel) {
+async function maybePushAfterAction() {
+  if (!config.gitDbUrl) return;
+  const strategy = await getEffectiveSyncStrategy();
+  if (strategy !== SYNC_STRATEGY.ACTION_BASED) return;
+  const result = await gitCommitAndPush();
+  if (!result.pushed) {
+    logger.warn('git.action_push_skipped', { committed: result.committed, message: result.message });
+  }
+}
+
+async function writeJson(filePath, data, commitMessage, authorKuerzel, options = {}) {
   // Validate: serialize first, then write — guarantees only valid JSON hits disk
   let json;
   try {
@@ -245,14 +326,20 @@ async function writeJson(filePath, data, commitMessage, authorKuerzel) {
   if (cat !== 'credentials') {
     sse.broadcast('invalidate', { category: cat, id: path.basename(filePath, '.json'), action: 'write', by: authorKuerzel || 'system' });
   }
+  if (!options.skipActionPush) {
+    await maybePushAfterAction();
+  }
 }
 
-async function deleteJson(filePath) {
+async function deleteJson(filePath, options = {}) {
   await fs.unlink(filePath);
   await gitSave(`Gelöscht: ${path.basename(filePath)}`, 'system', filePath);
   const cat = _fileCategory(filePath);
   if (cat !== 'credentials') {
     sse.broadcast('invalidate', { category: cat, id: path.basename(filePath, '.json'), action: 'delete' });
+  }
+  if (!options.skipActionPush) {
+    await maybePushAfterAction();
   }
 }
 
@@ -267,6 +354,45 @@ function _fileCategory(filePath) {
   if (rel.includes('/sparte/'))       return 'sparte';
   if (rel.includes('/chapter'))       return 'chapter';
   return 'other';
+}
+
+/**
+ * Commit message pattern (standardized):
+ *   <scope>: <userid>, <action>
+ * Example:
+ *   chapter/bsg: s850, Kapiteladmin hinzugefügt
+ */
+function _commitScope(filePath, actionText) {
+  const action = String(actionText || '');
+  const chapterMatch = action.match(/\bchapter\s+([a-z0-9_-]+)/i);
+  if (chapterMatch && chapterMatch[1]) return `chapter/${chapterMatch[1].toLowerCase()}`;
+
+  if (!filePath) return 'db';
+  const rel = path.relative(DB_PATH, filePath).replace(/\\/g, '/');
+  if (rel.startsWith('chapter/')) {
+    const parts = rel.split('/');
+    if (parts[1]) return `chapter/${parts[1]}`;
+    return 'chapter';
+  }
+  if (rel.startsWith('user/')) return 'user';
+  if (rel.startsWith('requests/')) return 'request';
+  if (rel === 'organisation.json') return 'organisation';
+  if (rel === 'credentials.json') return 'credentials';
+  return 'db';
+}
+
+function _commitAction(commitMessage, filePath) {
+  const action = String(commitMessage || '').trim().replace(/\s+/g, ' ');
+  if (action) return action;
+  if (filePath) return `Update ${path.basename(filePath)}`;
+  return 'Update';
+}
+
+function _formatCommitMessage(commitMessage, authorKuerzel, filePath) {
+  const actor = String(authorKuerzel || 'system').trim() || 'system';
+  const action = _commitAction(commitMessage, filePath);
+  const scope = _commitScope(filePath, action);
+  return `${scope}: ${actor}, ${action}`;
 }
 
 /**
@@ -298,9 +424,9 @@ async function gitSave(commitMessage, authorKuerzel, filePath) {
       if (status.staged.length === 0) return; // nothing to commit
       const kuerzel = authorKuerzel || 'system';
       const author  = `${kuerzel} <${kuerzel}@mcm.local>`;
-      const message = `${kuerzel}: ${commitMessage}`;
+      const message = _formatCommitMessage(commitMessage, kuerzel, filePath);
       await git.commit(message, { '--author': author });
-      logger.debug('git.commit', { msg: commitMessage });
+      logger.debug('git.commit', { msg: message });
     } catch (e) {
       // File is already saved – don't let git errors break the API
       logger.error('git.save', { err: e.message });
@@ -309,8 +435,9 @@ async function gitSave(commitMessage, authorKuerzel, filePath) {
 }
 
 /**
- * Commit all staged changes and push to remote (if configured).
- * Called periodically (every 5 min) and on manual trigger.
+ * Commit pending working-tree changes and push to remote (if configured).
+ * Also pushes already committed local commits when the working tree is clean.
+ * Called by timer, action-based sync, manual trigger, and shutdown.
  * Serialised via withGitLock; the per-operation timeout in getGit() ensures
  * a hung push is killed after GIT_TIMEOUT_MS and does not block the queue.
  */
@@ -319,25 +446,83 @@ async function gitCommitAndPush() {
     const git = getGit();
     try {
       const status = await git.status();
-      if (status.staged.length === 0 && status.not_added.length === 0 && status.modified.length === 0) {
-        return { committed: false, pushed: false, message: 'Keine Änderungen' };
+      const hasWorkingTreeChanges =
+        status.staged.length > 0 ||
+        status.not_added.length > 0 ||
+        status.modified.length > 0 ||
+        status.deleted.length > 0 ||
+        status.renamed.length > 0;
+
+      let committed = false;
+      if (hasWorkingTreeChanges) {
+        // Stage everything (catches any missed files)
+        await git.add('.');
+        const syncMessage = _formatCommitMessage(`Auto-Sync ${new Date().toISOString()}`, 'system');
+        await git.commit(syncMessage, {
+          '--author': 'system <system@mcm.local>'
+        });
+        committed = true;
       }
-      // Stage everything (catches any missed files)
-      await git.add('.');
-      await git.commit(`Auto-Sync ${new Date().toISOString()}`, {
-        '--author': 'system <system@mcm.local>'
-      });
+
       let pushed = false;
       if (config.gitDbUrl) {
-        const gitEnv = {};
-        if (!config.gitSslVerify) gitEnv.GIT_SSL_NO_VERIFY = '1';
+        const gitEnv = buildGitEnv();
         await git.env(gitEnv).remote(['set-url', 'origin', buildAuthUrl(config.gitDbUrl)]);
-        await git.env(gitEnv).push(['-u', 'origin', config.gitDbBranch]);
+        const remoteHeads = await listRemoteHeadsByOrigin(git, gitEnv);
+        const remoteEmpty = remoteHeads.length === 0;
+        const targetBranchExists = remoteHeads.includes(config.gitDbBranch);
+        if (!targetBranchExists && !remoteEmpty) {
+          throw new Error(`Remote branch '${config.gitDbBranch}' fehlt, obwohl das Remote nicht leer ist`);
+        }
+        if (remoteEmpty) {
+          logger.info('git.remote.bootstrap_branch', { branch: config.gitDbBranch });
+        }
+
+        const pushRef = `HEAD:refs/heads/${config.gitDbBranch}`;
+        await git.env(gitEnv).push(['-u', 'origin', pushRef]);
         pushed = true;
       }
-      return { committed: true, pushed, message: 'Synchronisiert' };
+
+      if (!committed && !pushed) {
+        return { committed: false, pushed: false, message: 'Keine Änderungen' };
+      }
+      return { committed, pushed, message: pushed ? 'Synchronisiert' : 'Committed' };
     } catch (e) {
       return { committed: false, pushed: false, message: e.message };
+    }
+  });
+}
+
+/**
+ * Return how many local commits are ahead of the tracked remote branch.
+ * Falls back to local branch commit count when no tracking branch exists yet.
+ */
+async function getPendingPushCount() {
+  return withGitLock(async () => {
+    const git = getGit();
+    try {
+      const status = await git.status();
+      let pendingPushCount = Number.parseInt(status.ahead, 10);
+      if (!Number.isFinite(pendingPushCount) || pendingPushCount < 0) pendingPushCount = 0;
+
+      // Fresh repositories may not have tracking configured yet.
+      // In that case, use local branch commit count as a best-effort fallback.
+      if (pendingPushCount === 0 && config.gitDbUrl && !status.tracking) {
+        try {
+          const branch = status.current || config.gitDbBranch;
+          const rawCount = await git.raw(['rev-list', '--count', branch]);
+          const fallbackCount = Number.parseInt(String(rawCount || '').trim(), 10);
+          if (Number.isFinite(fallbackCount) && fallbackCount > 0) {
+            pendingPushCount = fallbackCount;
+          }
+        } catch {
+          // Keep default value when branch counting is unavailable.
+        }
+      }
+
+      return { pendingPushCount };
+    } catch {
+      return { pendingPushCount: 0 };
     }
   });
 }
@@ -345,18 +530,24 @@ async function gitCommitAndPush() {
 let _syncInterval = null;
 
 function startAutoSync(intervalMs = 5 * 60 * 1000) {
+  const safeIntervalMs = Number.isFinite(intervalMs) && intervalMs > 0
+    ? intervalMs
+    : 5 * 60 * 1000;
   if (_syncInterval) clearInterval(_syncInterval);
   _syncInterval = setInterval(async () => {
     // Prune expired token revocations (older than 8h JWT lifetime)
     const cutoff = Date.now() - 8 * 60 * 60 * 1000;
     for (const [k, ts] of _revokedAt) { if (ts < cutoff) _revokedAt.delete(k); }
 
+    const strategy = await getEffectiveSyncStrategy();
+    if (strategy === SYNC_STRATEGY.MANUAL_ONLY) return;
+
     const result = await gitCommitAndPush();
-    if (result.committed) {
-      logger.info('git.autosync', { pushed: result.pushed });
+    if (result.committed || result.pushed) {
+      logger.info('git.autosync', { pushed: result.pushed, strategy });
     }
-  }, intervalMs);
-  logger.info('startup.autosync', { intervalSec: intervalMs / 1000 });
+  }, safeIntervalMs);
+  logger.info('startup.autosync', { intervalSec: safeIntervalMs / 1000 });
 }
 
 function stopAutoSync() {
@@ -416,7 +607,10 @@ async function deleteCredential(kuerzel, authorKuerzel) {
  * Persisted to data/revocation.json so the invalidation survives a restart.
  */
 function invalidateUserToken(kuerzel) {
-  _revokedAt.set(kuerzel, Date.now());
+  // JWT iat is second-based; keep revocation timestamp second-based as well
+  // so a freshly re-issued token in the same second is not rejected falsely.
+  const revokedAt = Math.floor(Date.now() / 1000) * 1000;
+  _revokedAt.set(kuerzel, revokedAt);
   logger.info('auth.token_revoked', { user: kuerzel });
 }
 
@@ -426,11 +620,13 @@ function getRevokedAt(kuerzel) {
 }
 
 async function readOrganisation() {
-  return readJson(path.join(DB_PATH, 'organisation.json'))
+  const org = await readJson(path.join(DB_PATH, 'organisation.json'))
     .catch(e => {
       if (e.code === 'ENOENT') return { name: '', chapters: [], orgAdmins: [] };
       throw e;
     });
+  if (!org.gitSyncStrategy) org.gitSyncStrategy = normalizeSyncStrategy(config.gitSyncStrategy);
+  return org;
 }
 
 /**
@@ -558,6 +754,7 @@ async function deleteChapterDir(chapterId, authorKuerzel) {
   const dir = path.join(DB_PATH, 'chapter', chapterId);
   await fs.rm(dir, { recursive: true, force: true });
   await gitSave(`Chapter ${chapterId} gelöscht`, authorKuerzel);
+  await maybePushAfterAction();
 }
 
 /**
@@ -577,12 +774,20 @@ async function ensureBootstrapAdmin() {
   const orgPath = path.join(DB_PATH, 'organisation.json');
   let org;
   try { org = await readJson(orgPath); } catch {
-    org = { id: 'org', name: '', chapters: [], orgAdmins: [], zeitstelle: [] };
+    org = {
+      id: 'org',
+      name: '',
+      chapters: [],
+      orgAdmins: [],
+      zeitstelle: [],
+      gitSyncStrategy: normalizeSyncStrategy(config.gitSyncStrategy),
+    };
   }
   if (!org.orgAdmins) org.orgAdmins = [];
   if (!org.orgAdmins.includes('admin')) org.orgAdmins.push('admin');
+  if (!org.gitSyncStrategy) org.gitSyncStrategy = normalizeSyncStrategy(config.gitSyncStrategy);
 
-  const bootstrapPassword = crypto.randomBytes(16).toString('hex');
+  const bootstrapPassword = config.bootstrapAdminPassword || crypto.randomBytes(16).toString('hex');
   const adminHash = await bcrypt.hash(bootstrapPassword, 12);
   await fs.mkdir(path.join(DB_PATH, 'user'),     { recursive: true });
   await fs.mkdir(path.join(DB_PATH, 'requests'), { recursive: true });
@@ -658,9 +863,12 @@ async function readAllUsers() {
 
 module.exports = {
   DB_PATH,
+  SYNC_STRATEGY,
   initDatabase,
   getDbPath,
   gitCommitAndPush,
+  getPendingPushCount,
+  getEffectiveSyncStrategy,
   startAutoSync,
   stopAutoSync,
   startGitWatchdog,

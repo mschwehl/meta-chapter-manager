@@ -32,6 +32,11 @@
       "items": { "type": "string" },
       "uniqueItems": true
     },
+    "gitSyncStrategy": {
+      "type": "string",
+      "description": "Git-Synchronisationsstrategie",
+      "enum": ["action-based", "timer-based", "manual-only"]
+    },
     "emails": {
       "type": "object",
       "properties": {

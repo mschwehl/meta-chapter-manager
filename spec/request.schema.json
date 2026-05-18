@@ -4,7 +4,7 @@
   "title": "RegistrationRequest",
   "description": "Registrierungsanfrage eines neuen Benutzers (ausstehende Genehmigung). Datei: requests/{kuerzel}-request.json",
   "type": "object",
-  "required": ["kuerzel", "name", "vorname", "requestedAt"],
+  "required": ["kuerzel", "name", "vorname", "businessMail", "requestedAt"],
   "properties": {
     "kuerzel": {
       "type": "string",
@@ -19,6 +19,19 @@
     "vorname": {
       "type": "string",
       "description": "Vorname des Antragstellers"
+    },
+    "businessMail": {
+      "type": "string",
+      "format": "email",
+      "description": "Dienstliche E-Mail-Adresse des Antragstellers"
+    },
+    "chapterId": {
+      "type": "string",
+      "description": "Optional gewünschtes Chapter für den Antrag"
+    },
+    "sparte": {
+      "type": "string",
+      "description": "Optional gewünschte Sparte innerhalb des gewünschten Chapters"
     },
     "bemerkung": {
       "type": "string",

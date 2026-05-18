@@ -10,7 +10,7 @@ const OrgaAdmin = {
     return {
       org: null,
       editing: false,
-      form: { name: '' },
+      form: { name: '', gitSyncStrategy: 'action-based' },
       error: '',
       picker: { search: '', results: [], list: [], activeIdx: -1 },
       gitLog: [],
@@ -33,12 +33,17 @@ const OrgaAdmin = {
     },
     startEdit() {
       this.editing = true; this.form.name = this.org.name;
+      this.form.gitSyncStrategy = this.org.gitSyncStrategy || 'action-based';
       this.picker.list = [...(this.org.orgAdmins || [])]; this.picker.search = ''; this.picker.results = [];
     },
     async save() {
       this.error = '';
       try {
-        const r = await this.apiPut('/api/orga', { name: this.form.name, orgAdmins: [...this.picker.list] });
+        const r = await this.apiPut('/api/orga', {
+          name: this.form.name,
+          orgAdmins: [...this.picker.list],
+          gitSyncStrategy: this.form.gitSyncStrategy,
+        });
         if (!r.ok) { this.error = (await r.json()).error; return; }
         this.editing = false; this.load();
       } catch (e) { this.error = e.message; }
@@ -60,6 +65,13 @@ const OrgaAdmin = {
       const d = new Date(iso);
       return d.toLocaleString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
     },
+    syncStrategyLabel(value) {
+      return {
+        'action-based': 'Action-based (nach jedem Schreibvorgang pushen)',
+        'timer-based': 'Timer-based (nur periodisch + manuell + Shutdown)',
+        'manual-only': 'Manual-only (nur manuell + Shutdown)',
+      }[value] || value || 'Unbekannt';
+    },
   },
   watch: {
     sseEvent(evt) { if (evt?.category === 'organisation') this.load(); },
@@ -67,7 +79,7 @@ const OrgaAdmin = {
   mounted() { this.load(); this.loadGitLog(); },
   template: `
 <div class="p-6 max-w-4xl mx-auto space-y-4">
-  <h1 class="text-xl font-bold text-gray-800">Organisation</h1>
+  <h1 class="text-xl font-bold text-gray-800">{{ org?.name || 'Organisation' }}</h1>
   <div v-if="org" class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
     <div v-if="!editing" class="space-y-3">
       <div class="grid grid-cols-2 gap-4 text-sm">
@@ -89,10 +101,25 @@ const OrgaAdmin = {
           </span>
         </div>
       </div>
+      <div>
+        <div class="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2">Git-Sync Strategie</div>
+        <div class="text-sm font-medium text-gray-700">{{ syncStrategyLabel(org.gitSyncStrategy) }}</div>
+        <div v-if="org.effectiveSyncStrategy && org.effectiveSyncStrategy !== org.gitSyncStrategy" class="text-xs text-gray-400 mt-1">
+          Effektiv: {{ syncStrategyLabel(org.effectiveSyncStrategy) }}
+        </div>
+      </div>
       <button v-if="isOrgaAdmin" @click="startEdit" class="btn-sm mt-4">Bearbeiten</button>
     </div>
     <div v-else class="space-y-4">
       <div><label class="lbl">Name</label><input v-model="form.name" class="ctrl" /></div>
+      <div>
+        <label class="lbl">Git-Sync Strategie</label>
+        <select v-model="form.gitSyncStrategy" class="ctrl">
+          <option value="action-based">Action-based (nach jedem Schreibvorgang pushen)</option>
+          <option value="timer-based">Timer-based (nur periodisch + manuell + Shutdown)</option>
+          <option value="manual-only">Manual-only (nur manuell + Shutdown)</option>
+        </select>
+      </div>
       <div>
         <label class="lbl">Organisations-Admins</label>
         <user-picker :picker="picker" :name-cache="userNameCache"

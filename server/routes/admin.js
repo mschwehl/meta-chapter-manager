@@ -4,7 +4,7 @@ const ExcelJS = require('exceljs');
 const {
   readAllUsers, readUser, writeJson, deleteJson, readCredentials, writeCredential, deleteCredential, DB_PATH, readOrganisation, readChapters, gitLog
 } = require('../lib/gitdb');
-const { requireChapterAdmin, requireOrgaAdmin, canManageChapterSparte } = require('../middleware/roles');
+const { requireChapterAdmin, requireOrgaAdmin, canManageChapterMembership } = require('../middleware/roles');
 const config = require('../config');
 const path = require('path');
 const logger = require('../lib/logger');
@@ -134,7 +134,6 @@ router.put('/users/:kuerzel', validateIds({ param: 'kuerzel' }), async (req, res
 // POST /api/admin/users/:kuerzel/chapter â€“ add chapter membership
 router.post('/users/:kuerzel/chapter', validateIds({ param: 'kuerzel' }, { body: 'chapterId' }, { body: 'sparte' }), async (req, res) => {
   const { kuerzel } = req.params;
-  const { roles, orgaAdmin } = req.user;
   const { chapterId, sparte, eintrittsdatum, austrittsdatum, status } = req.body;
   if (!chapterId || !sparte) return res.status(400).json({ error: 'chapterId und sparte erforderlich' });
 
@@ -143,8 +142,8 @@ router.post('/users/:kuerzel/chapter', validateIds({ param: 'kuerzel' }, { body:
     return res.status(404).json({ error: 'Benutzer nicht gefunden' });
   }
 
-  if (!orgaAdmin) {
-    if (!canManageChapterSparte(req.user, chapterId, sparte)) return res.status(403).json({ error: 'Zugriff verweigert' });
+  if (!canManageChapterMembership(req.user, chapterId, sparte)) {
+    return res.status(403).json({ error: 'Zugriff verweigert' });
   }
 
   if (existing.chapters?.some(c => c.chapterId === chapterId)) {
@@ -168,7 +167,6 @@ router.post('/users/:kuerzel/chapter', validateIds({ param: 'kuerzel' }, { body:
 // PATCH /api/admin/users/:kuerzel/chapter â€“ update membership (status, austrittsdatum, eintrittsdatum)
 router.patch('/users/:kuerzel/chapter', validateIds({ param: 'kuerzel' }, { body: 'chapterId' }, { body: 'sparte' }), async (req, res) => {
   const { kuerzel } = req.params;
-  const { roles, orgaAdmin } = req.user;
   const { chapterId, sparte, ...updates } = req.body;
   if (!chapterId || !sparte) return res.status(400).json({ error: 'chapterId und sparte erforderlich' });
 
@@ -177,8 +175,8 @@ router.patch('/users/:kuerzel/chapter', validateIds({ param: 'kuerzel' }, { body
     return res.status(404).json({ error: 'Benutzer nicht gefunden' });
   }
 
-  if (!orgaAdmin) {
-    if (!canManageChapterSparte(req.user, chapterId, sparte)) return res.status(403).json({ error: 'Zugriff verweigert' });
+  if (!canManageChapterMembership(req.user, chapterId, sparte)) {
+    return res.status(403).json({ error: 'Zugriff verweigert' });
   }
 
   const membership = (existing.chapters || []).find(c => c.chapterId === chapterId && c.sparte === sparte);
@@ -196,7 +194,6 @@ router.patch('/users/:kuerzel/chapter', validateIds({ param: 'kuerzel' }, { body
 // DELETE /api/admin/users/:kuerzel/chapter â€“ remove chapter membership
 router.delete('/users/:kuerzel/chapter', validateIds({ param: 'kuerzel' }, { body: 'chapterId' }, { body: 'sparte' }), async (req, res) => {
   const { kuerzel } = req.params;
-  const { roles, orgaAdmin } = req.user;
   const { chapterId, sparte } = req.body;
   if (!chapterId || !sparte) return res.status(400).json({ error: 'chapterId und sparte erforderlich' });
 
@@ -205,8 +202,8 @@ router.delete('/users/:kuerzel/chapter', validateIds({ param: 'kuerzel' }, { bod
     return res.status(404).json({ error: 'Benutzer nicht gefunden' });
   }
 
-  if (!orgaAdmin) {
-    if (!canManageChapterSparte(req.user, chapterId, sparte)) return res.status(403).json({ error: 'Zugriff verweigert' });
+  if (!canManageChapterMembership(req.user, chapterId, sparte)) {
+    return res.status(403).json({ error: 'Zugriff verweigert' });
   }
 
   existing.chapters = (existing.chapters || []).filter(c => !(c.chapterId === chapterId && c.sparte === sparte));
