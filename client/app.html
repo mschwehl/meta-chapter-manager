@@ -98,6 +98,11 @@
           <svg class="w-3.5 h-3.5 shrink-0" :class="syncing ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
           <span class="font-medium">{{ syncStatus.label }}</span>
         </button>
+        <!-- Mutation feedback (all mutating API calls) -->
+        <span v-if="mutationStatus" class="hidden sm:inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium bg-white/10 border border-white/10" :title="mutationStatus.title">
+          <span class="w-1.5 h-1.5 rounded-full" :class="mutationStatus.dotCls"></span>
+          <span :class="mutationStatus.cls">{{ mutationStatus.label }}</span>
+        </span>
         <!-- Online indicator -->
         <span class="hidden sm:inline-flex items-center gap-1 text-[10px] font-medium" :title="serverOnline ? 'Server verbunden' : 'Server nicht erreichbar'">
           <span class="w-1.5 h-1.5 rounded-full" :class="serverOnline ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-red-400 shadow-sm shadow-red-400/50 animate-pulse'"></span>
@@ -539,11 +544,77 @@ const app = createApp({
     });
 
     // ── API helpers ──
-    const api = (url, opts = {}) => fetch(url, { ...opts, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(opts.headers || {}) } })
-      .then(res => {
-        if (res.status === 401) { MCM_STORE.logout(); window.location.href = '/login.html'; }
-        return res;
-      });
+    const mutationInFlight = ref(0);
+    const mutationLastResult = ref('idle');
+    let _mutationResetTimer = null;
+
+    const mutationStatus = computed(() => {
+      if (mutationInFlight.value > 0) {
+        return {
+          label: mutationInFlight.value > 1 ? `Speichern (${mutationInFlight.value})` : 'Speichern…',
+          cls: 'text-amber-300',
+          dotCls: 'bg-amber-400 animate-pulse',
+          title: 'Änderungen werden gespeichert',
+        };
+      }
+      if (mutationLastResult.value === 'ok') {
+        return {
+          label: 'Gespeichert',
+          cls: 'text-emerald-300',
+          dotCls: 'bg-emerald-400',
+          title: 'Letzte Änderung gespeichert',
+        };
+      }
+      if (mutationLastResult.value === 'error') {
+        return {
+          label: 'Speicherfehler',
+          cls: 'text-red-300',
+          dotCls: 'bg-red-400',
+          title: 'Letzte Änderung fehlgeschlagen',
+        };
+      }
+      return null;
+    });
+
+    function beginMutation() {
+      if (_mutationResetTimer) {
+        clearTimeout(_mutationResetTimer);
+        _mutationResetTimer = null;
+      }
+      mutationInFlight.value += 1;
+      mutationLastResult.value = 'idle';
+    }
+
+    function endMutation(ok) {
+      mutationInFlight.value = Math.max(0, mutationInFlight.value - 1);
+      if (mutationInFlight.value > 0) return;
+      mutationLastResult.value = ok ? 'ok' : 'error';
+      _mutationResetTimer = setTimeout(() => {
+        _mutationResetTimer = null;
+        if (mutationInFlight.value === 0) mutationLastResult.value = 'idle';
+      }, 2500);
+    }
+
+    const api = (url, opts = {}) => {
+      const method = String(opts.method || 'GET').toUpperCase();
+      const isMutation = method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE';
+      let ok = false;
+      if (isMutation) beginMutation();
+
+      return fetch(url, { ...opts, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(opts.headers || {}) } })
+        .then(res => {
+          ok = res.ok;
+          if (res.status === 401) { MCM_STORE.logout(); window.location.href = '/login.html'; }
+          return res;
+        })
+        .catch(err => {
+          ok = false;
+          throw err;
+        })
+        .finally(() => {
+          if (isMutation) endMutation(ok);
+        });
+    };
     const apiPost = (url, body) => api(url, { method: 'POST', body: JSON.stringify(body) });
     const apiPut  = (url, body) => api(url, { method: 'PUT',  body: JSON.stringify(body) });
 
@@ -876,6 +947,7 @@ const app = createApp({
     onBeforeUnmount(() => {
       clearTimeout(_refreshTimer);
       clearTimeout(_uPickTimer);
+      clearTimeout(_mutationResetTimer);
       if (_pingTimer) clearInterval(_pingTimer);
       if (_evtSource) _evtSource.close();
       stopSyncStatusPolling();
@@ -886,7 +958,7 @@ const app = createApp({
       isOrgaAdmin, isZeitstelle, isChapterAdminAnywhere, hasAnyChapterRole,
       logout, statusCls, userMenu,
       ctx, ctxOptions, selectCtx, ctxPath, ctxModules,
-      syncing, syncStatus, triggerSync,
+      syncing, syncStatus, triggerSync, mutationStatus,
       chapterDirectory, serverOnline, appVersion,
       darkMode, toggleDark, goHome,
       greetingText, greetingDate, pendingCount,

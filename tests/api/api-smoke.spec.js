@@ -7,6 +7,7 @@ const state = {
   adminToken: '',
   chapterId: '',
   chapterAdmin: '',
+  mixedAdmin: '',
   memberUser: '',
   eventId: '',
 };
@@ -166,6 +167,67 @@ test('chapter admin can manage memberships while org admin cannot', async ({ req
     'DELETE',
     `/api/admin/users/${state.memberUser}/chapter`,
     chapterToken,
+    {
+      chapterId: state.chapterId,
+      sparte: 'tt',
+    }
+  );
+  expect(deleteMembership.ok()).toBeTruthy();
+});
+
+test('mixed org and chapter admin can manage memberships in own chapter', async ({ request }) => {
+  state.mixedAdmin = makeId('x');
+
+  const createMixedAdminUser = await authRequest(request, 'POST', '/api/admin/users', state.adminToken, {
+    kuerzel: state.mixedAdmin,
+    vorname: 'Mixed',
+    name: 'Admin',
+    orgeinheit: 'TEST',
+    kontakte: [],
+  });
+  expect(createMixedAdminUser.status()).toBe(201);
+
+  const chapterRes = await authRequest(request, 'GET', `/api/chapters/${state.chapterId}`, state.adminToken);
+  expect(chapterRes.ok()).toBeTruthy();
+  const chapter = await chapterRes.json();
+
+  const grantChapterAdmin = await authRequest(request, 'PUT', `/api/chapters/${state.chapterId}`, state.adminToken, {
+    ...chapter,
+    admins: [...new Set([...(chapter.admins || []), state.mixedAdmin])],
+  });
+  expect(grantChapterAdmin.ok()).toBeTruthy();
+
+  const orgRes = await authRequest(request, 'GET', '/api/orga', state.adminToken);
+  expect(orgRes.ok()).toBeTruthy();
+  const org = await orgRes.json();
+
+  const grantOrgaAdmin = await authRequest(request, 'PUT', '/api/orga', state.adminToken, {
+    name: org.name,
+    orgAdmins: [...new Set([...(org.orgAdmins || []), state.mixedAdmin])],
+  });
+  expect(grantOrgaAdmin.ok()).toBeTruthy();
+
+  const mixedAdminAuth = await login(request, state.mixedAdmin, state.mixedAdmin);
+  const mixedToken = mixedAdminAuth.token;
+
+  const addMembership = await authRequest(
+    request,
+    'POST',
+    `/api/admin/users/${state.memberUser}/chapter`,
+    mixedToken,
+    {
+      chapterId: state.chapterId,
+      sparte: 'tt',
+      status: 'aktiv',
+    }
+  );
+  expect(addMembership.ok()).toBeTruthy();
+
+  const deleteMembership = await authRequest(
+    request,
+    'DELETE',
+    `/api/admin/users/${state.memberUser}/chapter`,
+    mixedToken,
     {
       chapterId: state.chapterId,
       sparte: 'tt',

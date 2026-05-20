@@ -18,16 +18,16 @@ function canManageChapterSparte(user, chapterId, sparte) {
 
 /**
  * Returns true if the user may mutate chapter memberships.
- * Explicitly excludes orgaAdmin/zeitstelle to enforce the boundary:
- * orga app must not perform chapter membership add/include/update/remove.
+ * Membership changes require an explicit chapter/sparte role in the target chapter.
+ * This keeps pure orga-admin/zeitstelle users blocked, but allows mixed-role users
+ * (e.g. orga-admin + chapter-admin) to manage memberships in their own chapter.
  */
 function canManageChapterMembership(user, chapterId, sparte) {
   if (!user) return false;
-  if (user.orgaAdmin || user.zeitstelle) return false;
   const r = user.roles?.[chapterId];
   if (!r) return false;
   if (r.level === ROLE_LEVEL.CHAPTER) return true;
-  if (r.level === ROLE_LEVEL.SPARTE) return !!sparte && r.sparten.includes(sparte);
+  if (r.level === ROLE_LEVEL.SPARTE) return !!sparte && Array.isArray(r.sparten) && r.sparten.includes(sparte);
   return false;
 }
 

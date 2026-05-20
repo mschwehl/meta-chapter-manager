@@ -26,6 +26,7 @@ const rateLimit = require('express-rate-limit');
 const app = express();
 const OPENAPI_SPEC_FILE = path.join(__dirname, '../spec/openapi.yaml');
 const OPENAPI_UI_DIST_DIR = swaggerUiDist.getAbsoluteFSPath();
+const BRANDING_CUSTOM_FILE = path.join(__dirname, '../client/branding.custom.js');
 
 app.use(cors({ origin: config.corsOrigin || false }));
 app.use(express.json({ limit: '100kb' }));
@@ -41,6 +42,19 @@ app.use((_req, res, next) => {
 });
 
 app.use(express.static(path.join(__dirname, '../client')));
+
+// Optional deployment override: return a no-op JS file when branding.custom.js is absent.
+app.get('/branding.custom.js', async (_req, res) => {
+  try {
+    await fs.access(BRANDING_CUSTOM_FILE);
+    return res.sendFile(BRANDING_CUSTOM_FILE);
+  } catch {
+    return res
+      .status(200)
+      .type('application/javascript')
+      .send('// branding.custom.js not configured\n');
+  }
+});
 
 // Redirect /favicon.ico to /favicon.svg
 app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
